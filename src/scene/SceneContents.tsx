@@ -4,6 +4,7 @@ import { Group, PerspectiveCamera } from 'three'
 import type { SceneConfig, Vec3 } from '../config/scene'
 import Fetus from './Fetus'
 import Stars from './Stars'
+import Nebula from './Nebula'
 import PalettePass from './PalettePass'
 import { cameraDistance } from './math'
 
@@ -74,6 +75,7 @@ export default function SceneContents({
   return (
     <>
       <color attach="background" args={['#000000']} />
+      <Nebula />
       <Stars config={config.stars} />
       <group ref={group} position={config.model.position} scale={config.model.scale}>
         <Suspense fallback={null}>

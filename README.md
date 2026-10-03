@@ -1,6 +1,6 @@
 # 25ohms / OHMEGA
 
-An artist portfolio built around an interactive, palette-mapped wireframe sculpture. The site combines editable portfolio content with a browser-rendered 3D hero scene. Fonts and runtime images are served locally; no credentials or environment variables are required.
+An artist portfolio built as a single-screen, CRT-inspired game menu around an interactive, palette-mapped wireframe sculpture. The dial opens external work links while the OHMEGA scene remains in view. Fonts and runtime images are served locally; no credentials or environment variables are required.
 
 ## Installation and setup
 
@@ -18,27 +18,26 @@ Open the local URL printed by Vite. `npm run build` type-checks and creates the 
 ## Main stack and why it is used
 
 - **Vite** provides the local development server and produces static files that can be hosted without an application server.
-- **React and TypeScript** structure the site into reusable page and scene components while catching many content and configuration mistakes during the build.
-- **React Router** handles the portfolio's direct routes (`/audio`, `/visual`, `/live`, `/about`, and `/contact`) as a single-page site.
-- **Three.js with React Three Fiber** renders the interactive OHMEGA sculpture and star field. React Three Fiber lets the scene live alongside the React interface; Three.js supplies the WebGL rendering primitives.
+- **React and TypeScript** structure the single-screen menu and scene controls while catching many content and configuration mistakes during the build.
+- **Three.js with React Three Fiber** renders the interactive OHMEGA sculpture, twinkling stars, and procedural nebula. React Three Fiber lets the scene live alongside the React interface; Three.js supplies the WebGL rendering primitives.
 - **A custom Three.js palette pass** creates the dithered, limited-color treatment. DOM text and controls remain regular HTML for accessibility and responsive layout.
 - **Plain CSS** styles the site without adding a component framework, keeping the visual system and responsive rules close to the project.
 - **Vitest and Playwright** support scene-level and browser-level checks; **ESLint and Prettier** support consistent source code.
 
 ## Architecture
 
-The browser starts at `index.html`, mounts the React application, and uses the router to render a page. The home page lazy-loads the 3D scene so other routes do not need to load its scene code or model. The scene renders to an offscreen target before the palette pass displays it.
+The browser starts at `index.html` and mounts the React application. A fixed radial dial changes the active menu item and opens a compact link panel; the 3D scene stays mounted behind the interface. The scene renders to an offscreen target before the palette pass displays it.
 
 ```mermaid
 flowchart TD
     Browser[index.html]
     Entry[src/main.tsx]
-    App[src/App.tsx<br/>React Router and page shell]
+    App[src/App.tsx<br/>Single-screen dial and link panels]
     Content[src/data/artist.ts<br/>Page content and links]
     Styles[src/styles.css]
-    Home[Home page]
-    Routes[Audio / Visual / Live / About / Contact]
-    Hero[src/scene/HeroScene.tsx<br/>Lazy-loaded scene and controls]
+    Home[Full-screen experience]
+    Dial[Audio / Visual / Shows / Contact]
+    Hero[src/scene/HeroScene.tsx<br/>Scene and controls]
     Config[src/config/scene.ts<br/>Scene defaults and validation]
     Contents[SceneContents.tsx]
     Model[Fetus.tsx + FetusLoader.ts<br/>FBX model]
@@ -50,7 +49,7 @@ flowchart TD
     App --> Content
     App --> Styles
     App --> Home
-    App --> Routes
+    App --> Dial
     Home --> Hero
     Hero --> Config
     Hero --> Contents
@@ -67,8 +66,8 @@ flowchart TD
 .
 ├── index.html                 # HTML entry point
 ├── src/
-│   ├── main.tsx               # React bootstrap, router, local fonts and CSS
-│   ├── App.tsx                # Shared shell, navigation and route pages
+│   ├── main.tsx               # React bootstrap, local fonts and CSS
+│   ├── App.tsx                # Full-screen dial and link panels
 │   ├── data/artist.ts         # Page copy, navigation and public social links
 │   ├── config/scene.ts        # Scene defaults and configuration validation
 │   ├── scene/                 # 3D scene, model loader, palette effect and tests
@@ -101,25 +100,25 @@ In development, click **Tune scene +** on the landing page. The panel controls:
 
 To promote a preset, replace the `DEFAULT_SCENE` object in `src/config/scene.ts` with the exported JSON object. Keep its `SceneConfig` annotation. Rebuild, inspect the result, then regenerate the fallback image. This is deliberately a manual, reviewable change: the tuning panel never rewrites source files.
 
-Visitors can drag to inspect, use the arrow keys when the scene is focused, press Space to pause/resume, and press Home to reset. On touchscreens, horizontal swipes rotate while vertical gestures can scroll the page. Reduced motion starts the sculpture still.
+Visitors can drag to inspect the sculpture, use the arrow keys to move through the dial, and use the on-screen controls to pause or reset the scene. Reduced motion starts the sculpture still. The font and CRT colors are centralized in the custom properties at the top of `src/styles.css`.
 
 ## Rendering and model compatibility
 
-`Fetus` loads the original `models/fetus/source/scene.fbx`, centers its bounds, and applies one shared, unlit white wire material. `Stars` creates a deterministic point field. `PalettePass` renders both to an offscreen target, quantizes luminance using a Bayer threshold, and samples a color-ramp texture. Palette colors are stored in sRGB, decoded for sampling, and converted to the display color space once at the output. Text and controls stay in the DOM.
+`Fetus` loads the original `models/fetus/source/scene.fbx`, centers its bounds, and applies one shared, unlit white wire material. `Stars` creates a deterministic, slowly drifting point field with individual twinkle; `Nebula` adds animated procedural clouds behind it. `PalettePass` renders the scene to an offscreen target, quantizes luminance using a Bayer threshold, and samples a color-ramp texture. Palette colors are stored in sRGB, decoded for sampling, and converted to the display color space once at the output. Text and controls stay in the DOM.
 
 The supplied MODO FBX contains two artifacts that stock FBXLoader cannot parse: an empty normals layer and an unconnected `MODO_RenderSettings` model. `FetusLoader` ignores those two node names in a copied buffer. The source file and all geometry data remain intact. A test parses the real asset and checks finite geometry and unchanged source bytes.
 
-The scene caps device pixel ratio and reduces offscreen resolution if measured frame rate stays below 42 FPS after warmup. Animation stops while the scene is outside the viewport or the document is hidden. Paused scenes render on demand. Model data is cached for route revisits, while per-mount materials and postprocessing resources are disposed. The renderer uses WebGL2; failure shows `public/ohmega-still.png` and keeps the website usable.
+The scene caps device pixel ratio and reduces offscreen resolution if measured frame rate stays below 42 FPS after warmup. Animation stops while the scene is outside the viewport or the document is hidden. Paused scenes render on demand. Model data is reused while the scene is mounted, while per-mount materials and postprocessing resources are disposed. The renderer uses WebGL2; failure shows `public/ohmega-still.png` and keeps the website usable.
 
 ## Content and next milestone
 
 - `src/data/artist.ts`: navigation, section descriptions, biography, and named public social links.
 - `src/styles.css`: palette, typography, spacing, and responsive layouts.
-- `src/App.tsx`: home and section templates for Audio, Visual, Live, About, and Contact.
+- `src/App.tsx`: single-screen radial menu and compact external-link panels.
 
-Audio, Visual, and Live have intentional empty states and real external links. About uses the supplied bio. Contact currently links to Instagram; it has no form or submission backend. The supplied SoundCloud insights URL is a private dashboard and is not published.
+Audio, Visual, Shows, and Contact link to the artist's public Bandcamp, YouTube, Resident Advisor, and Instagram pages. The supplied SoundCloud insights URL is a private dashboard and is not published.
 
-The next milestone adds hosted audio files and a persistent HTML audio player mounted in the application shell, outside route content; real project and performance entries; and a contact form with a delivery service. No fake music, shows, or project records are included. There is no CMS, analytics, or server API in this milestone.
+Future work can replace the external links with hosted audio, project and performance content, and a contact service. There is no CMS, analytics, or server API in this milestone.
 
 ## Checks and previews
 
@@ -131,7 +130,7 @@ npx playwright install chromium firefox webkit
 npm run test:e2e
 ```
 
-Browser tests cover actual model loading, motion controls, route transitions, reduced motion, live-pose export/persistence, failure fallback, mobile layout, and direct section URLs. Desktop/mobile emulation does not replace physical-device testing.
+Browser tests cover actual model loading, motion controls, reduced motion, live-pose export/persistence, failure fallback, and mobile layout. Desktop/mobile emulation does not replace physical-device testing.
 
 With the development server running, refresh the fallback from the actual scene:
 
@@ -147,6 +146,6 @@ Run `npm run check:production` with `npm run preview -- --port 4173` running to 
 
 ## Hosting
 
-Deploy the contents of `dist/` to a static host. Configure SPA fallback so requests such as `/audio` serve `index.html` with status 200; missing assets should still return 404. For example, on Netlify add `/* /index.html 200` as a rewrite, or on Nginx use `try_files $uri $uri/ /index.html`. Keep the app at the domain root unless Vite's base and the router basename are changed together.
+Deploy the contents of `dist/` to a static host. The site is a single screen and does not require route rewrites. Keep it at the domain root unless Vite's `base` path is changed.
 
-The 3D scene is lazy-loaded on the landing page. Development controls are removed from production. No deployment has been made by this repository setup.
+Development tuning controls are removed from production. No deployment has been made by this repository setup.

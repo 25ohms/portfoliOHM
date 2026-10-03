@@ -24,7 +24,7 @@ export const DEFAULT_SCENE: SceneConfig = {
   camera: { fov: 36, padding: 1.35 },
   motion: { speed: 0.075 },
   material: { intensity: 0.85, opacity: 0.3 },
-  stars: { count: 900, size: 1.35, brightness: 0.65, seed: 25 },
+  stars: { count: 1800, size: 1.5, brightness: 0.8, seed: 25 },
   dither: { enabled: true, matrix: 4, pixelSize: 2, strength: 0.8, levels: 5 },
   palette: [
     { position: 0, color: '#050909' },
