@@ -1,0 +1,298 @@
+import {
+  Component,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ErrorInfo,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react'
+import { Canvas } from '@react-three/fiber'
+import { NoToneMapping, SRGBColorSpace } from 'three'
+import {
+  DEFAULT_SCENE,
+  PRESET_KEY,
+  parseSceneConfig,
+  type SceneConfig,
+  type Vec3,
+} from '../config/scene'
+import SceneContents from './SceneContents'
+
+const DevPanel = import.meta.env.DEV ? lazy(() => import('./SceneDevPanel')) : null
+
+function saveDraft(config: SceneConfig) {
+  if (!import.meta.env.DEV) return
+  try {
+    localStorage.setItem(PRESET_KEY, JSON.stringify(config))
+  } catch {
+    // Storage is optional; a private browser session can still tune the scene.
+  }
+}
+
+function initialConfig(): SceneConfig {
+  if (import.meta.env.DEV) {
+    try {
+      const saved = localStorage.getItem(PRESET_KEY)
+      if (saved) return parseSceneConfig(JSON.parse(saved))
+    } catch {
+      /* An old or invalid draft must not prevent the scene from loading. */
+    }
+  }
+  return structuredClone(DEFAULT_SCENE)
+}
+
+class SceneErrorBoundary extends Component<
+  { children: ReactNode; onError: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('OHMEGA scene could not load', error, info)
+    this.props.onError()
+  }
+  render() {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
+export default function HeroScene() {
+  const [config, setConfig] = useState(initialConfig)
+  const [ready, setReady] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [paused, setPaused] = useState(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  const [visible, setVisible] = useState(true)
+  const [quality, setQuality] = useState(1)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [panelRevision, setPanelRevision] = useState(0)
+  const region = useRef<HTMLDivElement>(null)
+  const pose = useRef<Vec3>([...config.model.rotation])
+  const invalidate = useRef<() => void>(() => {})
+  const dragging = useRef(false)
+  const pointer = useRef<{ id: number; x: number; y: number } | null>(null)
+  const runtime = useMemo(() => ({ pose, invalidate, dragging }), [])
+  const handleReady = useCallback(() => setReady(true), [])
+  const handleError = useCallback(() => setFailed(true), [])
+  const handleSlow = useCallback(() => setQuality(0.65), [])
+
+  useEffect(() => {
+    pose.current = [...config.model.rotation]
+    invalidate.current()
+  }, [config.model.rotation])
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setPaused(mq.matches)
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  useEffect(() => {
+    let intersecting = true
+    const update = () => setVisible(intersecting && !document.hidden)
+    const observer = new IntersectionObserver(([entry]) => {
+      intersecting = entry.isIntersecting
+      update()
+    })
+    if (region.current) observer.observe(region.current)
+    document.addEventListener('visibilitychange', update)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', update)
+    }
+  }, [])
+  useEffect(() => {
+    saveDraft(config)
+  }, [config])
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const save = () => {
+      saveDraft({ ...config, model: { ...config.model, rotation: pose.current } })
+    }
+    window.addEventListener('pagehide', save)
+    return () => {
+      save()
+      window.removeEventListener('pagehide', save)
+    }
+  }, [config])
+
+  const resetPose = () => {
+    pose.current = [...config.model.rotation]
+    invalidate.current()
+  }
+  const finishDrag = () => {
+    dragging.current = false
+    pointer.current = null
+    saveDraft({ ...config, model: { ...config.model, rotation: pose.current } })
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const { key } = event
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', ' '].includes(key)) return
+    event.preventDefault()
+
+    if (key === ' ') {
+      setPaused((current) => !current)
+    } else if (key === 'Home') {
+      resetPose()
+    } else {
+      const axis = key === 'ArrowUp' || key === 'ArrowDown' ? 0 : 1
+      const direction = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
+      setPaused(true)
+      pose.current[axis] += direction * 0.12
+      invalidate.current()
+    }
+  }
+
+  function startDrag(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || failed) return
+    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
+    dragging.current = true
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.focus({ preventScroll: true })
+  }
+
+  function moveDrag(event: PointerEvent<HTMLDivElement>) {
+    const previous = pointer.current
+    if (!previous || previous.id !== event.pointerId) return
+    pose.current[1] += (event.clientX - previous.x) * 0.006
+    pose.current[0] += (event.clientY - previous.y) * 0.006
+    previous.x = event.clientX
+    previous.y = event.clientY
+    invalidate.current()
+  }
+
+  const running = !paused && visible && config.motion.speed > 0 && ready
+  return (
+    <div className="scene-wrapper">
+      <div
+        ref={region}
+        className={`scene-viewport${ready ? ' is-ready' : ''}`}
+        tabIndex={0}
+        role="region"
+        aria-label="Interactive OHMEGA wireframe sculpture"
+        aria-describedby="scene-instructions"
+        onKeyDown={handleKeyDown}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+        onLostPointerCapture={finishDrag}
+      >
+        {(!ready || failed) && (
+          <picture>
+            <source media="(max-width: 700px)" srcSet="/ohmega-still-mobile.png" />
+            <img
+              className="scene-fallback"
+              src="/ohmega-still.png"
+              alt="A cyan wireframe fetus floating in a dark star field"
+            />
+          </picture>
+        )}
+        {!failed && (
+          <SceneErrorBoundary onError={handleError}>
+            <Canvas
+              dpr={[1, config.quality.maxDpr]}
+              frameloop={running ? 'always' : 'demand'}
+              camera={{ position: [0, 0, 5], near: 0.01, far: 80, fov: config.camera.fov }}
+              gl={{
+                antialias: false,
+                alpha: false,
+                powerPreference: 'low-power',
+                preserveDrawingBuffer: import.meta.env.DEV,
+              }}
+              onCreated={({ gl }) => {
+                gl.toneMapping = NoToneMapping
+                gl.outputColorSpace = SRGBColorSpace
+                gl.domElement.addEventListener('webglcontextlost', handleError, { once: true })
+              }}
+              fallback={<p>View the OHMEGA still image.</p>}
+            >
+              <SceneContents
+                config={config}
+                runtime={runtime}
+                running={running}
+                resolution={config.quality.resolution * quality}
+                onReady={handleReady}
+                onSlow={handleSlow}
+              />
+            </Canvas>
+          </SceneErrorBoundary>
+        )}
+      </div>
+      <div className="scene-coordinate" aria-hidden="true">
+        <span>VESSEL_001</span>
+        <span>SYS / OHMEGA</span>
+      </div>
+      <div className="scene-controls">
+        <span id="scene-instructions">
+          {failed ? (
+            'STILL / OHMEGA'
+          ) : (
+            <>
+              <span className="desktop-instruction">DRAG TO ROTATE · </span>
+              <span className="mobile-instruction">SWIPE TO ROTATE · </span>
+              <span className="sr-only">Arrow keys rotate. Space pauses. Home resets. </span>EXPLORE
+              THE VESSEL
+            </>
+          )}
+        </span>
+        {!failed && (
+          <div>
+            <button
+              aria-label={paused ? 'Resume rotation' : 'Pause rotation'}
+              onClick={() => setPaused((p) => !p)}
+            >
+              {paused ? '▶' : 'Ⅱ'}
+            </button>
+            <button aria-label="Reset sculpture pose" onClick={resetPose}>
+              ↺
+            </button>
+          </div>
+        )}
+      </div>
+      <span role="status" className="sr-only">
+        {failed
+          ? 'Interactive scene unavailable. Showing a still image.'
+          : ready
+            ? 'Sculpture loaded.'
+            : 'Loading sculpture.'}
+      </span>
+      {DevPanel && (
+        <>
+          <button
+            className="dev-toggle"
+            onClick={() => setPanelOpen(!panelOpen)}
+            aria-expanded={panelOpen}
+          >
+            {panelOpen ? 'Close tuning −' : 'Tune scene +'}
+          </button>
+          {panelOpen && (
+            <Suspense fallback={null}>
+              <DevPanel
+                key={panelRevision}
+                config={config}
+                setConfig={setConfig}
+                getPose={() => [...pose.current]}
+                onReplace={(c) => {
+                  setConfig(c)
+                  setPanelRevision((v) => v + 1)
+                  setPaused(true)
+                }}
+                onPause={() => setPaused(true)}
+                onClose={() => setPanelOpen(false)}
+              />
+            </Suspense>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
