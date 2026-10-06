@@ -62,7 +62,9 @@ export default function Stars({ config }: { config: SceneConfig['stars'] }) {
   }, [config.size, config.brightness])
 
   useFrame((_, delta) => {
-    if (material.current) material.current.uniforms.uTime.value += Math.min(delta, 0.05)
+    if (material.current) {
+      material.current.uniforms.uTime.value += Math.min(delta, 0.05)
+    }
     if (field.current) {
       field.current.rotation.y += delta * 0.0009
       field.current.rotation.x =

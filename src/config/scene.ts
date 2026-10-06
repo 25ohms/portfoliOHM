@@ -20,7 +20,7 @@ export interface SceneConfig {
 
 export const DEFAULT_SCENE: SceneConfig = {
   version: 1,
-  model: { rotation: [0.1, -0.45, -0.18], position: [0, 0, 0], scale: 1 },
+  model: { rotation: [0.13962634015954636, 0, 0], position: [0, 0, 0], scale: 1 },
   camera: { fov: 36, padding: 1.35 },
   motion: { speed: 0.075 },
   material: { intensity: 0.85, opacity: 0.3 },

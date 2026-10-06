@@ -35,7 +35,9 @@ const fragmentShader = `
 export default function Nebula() {
   const material = useRef<ShaderMaterial>(null)
   useFrame((_, delta) => {
-    if (material.current) material.current.uniforms.uTime.value += Math.min(delta, 0.05)
+    if (material.current) {
+      material.current.uniforms.uTime.value += Math.min(delta, 0.05)
+    }
   })
   return (
     <mesh position={[0, 0, -18]}>

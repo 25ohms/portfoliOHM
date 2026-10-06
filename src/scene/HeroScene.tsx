@@ -38,7 +38,11 @@ function initialConfig(): SceneConfig {
   if (import.meta.env.DEV) {
     try {
       const saved = localStorage.getItem(PRESET_KEY)
-      if (saved) return parseSceneConfig(JSON.parse(saved))
+      if (saved) {
+        const config = parseSceneConfig(JSON.parse(saved))
+        config.model.rotation = [...DEFAULT_SCENE.model.rotation]
+        return config
+      }
     } catch {
       /* An old or invalid draft must not prevent the scene from loading. */
     }
@@ -63,13 +67,10 @@ class SceneErrorBoundary extends Component<
   }
 }
 
-export default function HeroScene() {
+export default function HeroScene({ cardOpen = false }: { cardOpen?: boolean }) {
   const [config, setConfig] = useState(initialConfig)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
-  const [paused, setPaused] = useState(
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  )
   const [visible, setVisible] = useState(true)
   const [quality, setQuality] = useState(1)
   const [panelOpen, setPanelOpen] = useState(false)
@@ -88,12 +89,6 @@ export default function HeroScene() {
     pose.current = [...config.model.rotation]
     invalidate.current()
   }, [config.model.rotation])
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const update = () => setPaused(mq.matches)
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
   useEffect(() => {
     let intersecting = true
     const update = () => setVisible(intersecting && !document.hidden)
@@ -135,20 +130,9 @@ export default function HeroScene() {
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const { key } = event
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', ' '].includes(key)) return
+    if (key !== 'Home') return
     event.preventDefault()
-
-    if (key === ' ') {
-      setPaused((current) => !current)
-    } else if (key === 'Home') {
-      resetPose()
-    } else {
-      const axis = key === 'ArrowUp' || key === 'ArrowDown' ? 0 : 1
-      const direction = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
-      setPaused(true)
-      pose.current[axis] += direction * 0.12
-      invalidate.current()
-    }
+    if (key === 'Home') resetPose()
   }
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
@@ -169,7 +153,7 @@ export default function HeroScene() {
     invalidate.current()
   }
 
-  const running = !paused && visible && config.motion.speed > 0 && ready
+  const running = visible && config.motion.speed > 0 && ready
   return (
     <div className="scene-wrapper">
       <div
@@ -218,6 +202,7 @@ export default function HeroScene() {
               <SceneContents
                 config={config}
                 runtime={runtime}
+                cardOpen={cardOpen}
                 running={running}
                 resolution={config.quality.resolution * quality}
                 onReady={handleReady}
@@ -239,19 +224,12 @@ export default function HeroScene() {
             <>
               <span className="desktop-instruction">DRAG TO ROTATE · </span>
               <span className="mobile-instruction">SWIPE TO ROTATE · </span>
-              <span className="sr-only">Arrow keys rotate. Space pauses. Home resets. </span>EXPLORE
-              THE VESSEL
+              <span className="sr-only">Drag to rotate. Home resets. </span>EXPLORE THE VESSEL
             </>
           )}
         </span>
         {!failed && (
           <div>
-            <button
-              aria-label={paused ? 'Resume rotation' : 'Pause rotation'}
-              onClick={() => setPaused((p) => !p)}
-            >
-              {paused ? '▶' : 'Ⅱ'}
-            </button>
             <button aria-label="Reset sculpture pose" onClick={resetPose}>
               ↺
             </button>
@@ -284,9 +262,7 @@ export default function HeroScene() {
                 onReplace={(c) => {
                   setConfig(c)
                   setPanelRevision((v) => v + 1)
-                  setPaused(true)
                 }}
-                onPause={() => setPaused(true)}
                 onClose={() => setPanelOpen(false)}
               />
             </Suspense>

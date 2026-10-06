@@ -7,14 +7,12 @@ export default function SceneDevPanel({
   setConfig,
   getPose,
   onReplace,
-  onPause,
   onClose,
 }: {
   config: SceneConfig
   setConfig: Dispatch<SetStateAction<SceneConfig>>
   getPose: () => Vec3
   onReplace: (c: SceneConfig) => void
-  onPause: () => void
   onClose: () => void
 }) {
   const store = useCreateStore()
@@ -103,7 +101,6 @@ export default function SceneDevPanel({
           step: 1,
           onChange: (value: Vec3, _path, ctx) => {
             if (!ctx.initial) {
-              onPause()
               patch(
                 'model',
                 'rotation',
