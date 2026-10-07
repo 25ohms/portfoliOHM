@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import {
+  Color,
   DataTexture,
   LinearFilter,
   SRGBColorSpace,
@@ -15,6 +16,20 @@ import {
 } from 'three'
 import type { SceneConfig } from '../config/scene'
 import { paletteBytes } from './math'
+
+function accentPalette(config: SceneConfig, accentValue: string, accentShift: number) {
+  const accent = new Color().setStyle(accentValue, SRGBColorSpace)
+  const colors = config.palette.map((stop) => new Color(stop.color))
+  const luminances = colors.map((color) => color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722)
+  const darkest = Math.min(...luminances)
+  const brightest = Math.max(...luminances)
+  return config.palette.map((stop, index) => {
+    const range = brightest - darkest
+    const brightness = range > 0 ? Math.sqrt((luminances[index] - darkest) / range) : 0
+    const color = new Color(stop.color).lerp(accent.clone().multiplyScalar(brightness), accentShift)
+    return { ...stop, color: `#${color.getHexString(SRGBColorSpace)}` }
+  })
+}
 
 const fragmentShader = `
   uniform sampler2D tScene;
@@ -56,6 +71,7 @@ export default function PalettePass({
   resolution: number
 }) {
   const { gl, size, invalidate } = useThree()
+  const lastAccent = useMemo(() => ({ current: '' }), [])
   const resources = useMemo(() => {
     const target = new WebGLRenderTarget(1, 1, { depthBuffer: true })
     const palette = new DataTexture(new Uint8Array(256 * 4), 256, 1, RGBAFormat)
@@ -94,8 +110,13 @@ export default function PalettePass({
   }, [])
 
   useEffect(() => {
-    resources.palette.image.data.set(paletteBytes(config.palette))
+    const theme = getComputedStyle(document.documentElement)
+    const accent = theme.getPropertyValue('--accent').trim()
+    const accentShift = Number.parseFloat(theme.getPropertyValue('--accent-shift')) / 100 || 0
+    const themeKey = `${accent}:${accentShift}`
+    resources.palette.image.data.set(paletteBytes(accentPalette(config, accent, accentShift)))
     resources.palette.needsUpdate = true
+    lastAccent.current = themeKey
     const u = resources.material.uniforms
     u.uPixelSize.value = config.dither.pixelSize
     u.uStrength.value = config.dither.strength
@@ -104,6 +125,49 @@ export default function PalettePass({
     u.uEnabled.value = config.dither.enabled
     invalidate()
   }, [config.dither, config.palette, resources, invalidate])
+
+  useEffect(() => {
+    let frame = 0
+    const cancelAnimation = () => {
+      if (frame) cancelAnimationFrame(frame)
+      frame = 0
+    }
+    const animatePalette = (event: TransitionEvent) => {
+      if (event.propertyName !== '--accent' && event.propertyName !== '--accent-shift') return
+      if (event.type === 'transitionend' || event.type === 'transitioncancel') {
+        cancelAnimation()
+        invalidate()
+        return
+      }
+      if (frame) return
+      const update = () => {
+        invalidate()
+        frame = requestAnimationFrame(update)
+      }
+      frame = requestAnimationFrame(update)
+    }
+    const root = document.documentElement
+    root.addEventListener('transitionrun', animatePalette)
+    root.addEventListener('transitionend', animatePalette)
+    root.addEventListener('transitioncancel', animatePalette)
+    return () => {
+      cancelAnimation()
+      root.removeEventListener('transitionrun', animatePalette)
+      root.removeEventListener('transitionend', animatePalette)
+      root.removeEventListener('transitioncancel', animatePalette)
+    }
+  }, [invalidate])
+
+  useFrame(() => {
+    const theme = getComputedStyle(document.documentElement)
+    const accent = theme.getPropertyValue('--accent').trim()
+    const accentShift = Number.parseFloat(theme.getPropertyValue('--accent-shift')) / 100 || 0
+    const themeKey = `${accent}:${accentShift}`
+    if (themeKey === lastAccent.current) return
+    resources.palette.image.data.set(paletteBytes(accentPalette(config, accent, accentShift)))
+    resources.palette.needsUpdate = true
+    lastAccent.current = themeKey
+  })
 
   useEffect(() => {
     const dpr = gl.getPixelRatio()

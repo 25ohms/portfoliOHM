@@ -1,12 +1,92 @@
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #8effdc;
+}
+@property --accent-shift {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
 :root {
   /* Change these tokens to retune the type and CRT palette in one place. */
   --font-display: 'The 2K12', 'DM Sans Variable', sans-serif;
   --font-ui: 'Space Mono', 'LED Dot Pixel', monospace;
   --bg: #030608;
   --ink: #d4fff3;
-  --muted: #75a89e;
+  --muted: color-mix(
+    in srgb,
+    #75a89e,
+    color-mix(in srgb, var(--accent) 56%, #14201e) var(--accent-shift)
+  );
+  --default-accent: #8effdc;
   --accent: #8effdc;
-  --line: #4ad9c52e;
+  --line: color-mix(
+    in srgb,
+    #4ad9c52e,
+    color-mix(in srgb, var(--accent) 18%, transparent) var(--accent-shift)
+  );
+  --dial-idle: color-mix(
+    in srgb,
+    #82a49c,
+    color-mix(in srgb, var(--accent) 56%, #14201e) var(--accent-shift)
+  );
+  --boot-glow: color-mix(
+    in srgb,
+    #8effdc38,
+    color-mix(in srgb, var(--accent) 22%, transparent) var(--accent-shift)
+  );
+  --boot-text-glow: color-mix(
+    in srgb,
+    #8effdc8a,
+    color-mix(in srgb, var(--accent) 54%, transparent) var(--accent-shift)
+  );
+  --rail-glow: color-mix(
+    in srgb,
+    #8effdc12,
+    color-mix(in srgb, var(--accent) 7%, transparent) var(--accent-shift)
+  );
+  --card-glow: color-mix(
+    in srgb,
+    #42f5ce12,
+    color-mix(in srgb, var(--accent) 7%, transparent) var(--accent-shift)
+  );
+  --card-inner-glow: color-mix(
+    in srgb,
+    #29d8bc0c,
+    color-mix(in srgb, var(--accent) 5%, transparent) var(--accent-shift)
+  );
+  --timeline-track: color-mix(
+    in srgb,
+    #46635d,
+    color-mix(in srgb, var(--accent) 25%, #030608) var(--accent-shift)
+  );
+  --control-glow: color-mix(
+    in srgb,
+    #8effdc66,
+    color-mix(in srgb, var(--accent) 40%, transparent) var(--accent-shift)
+  );
+  --play-glow: color-mix(
+    in srgb,
+    #8effdc30,
+    color-mix(in srgb, var(--accent) 19%, transparent) var(--accent-shift)
+  );
+  --track-divider: color-mix(
+    in srgb,
+    #4ad9c51c,
+    color-mix(in srgb, var(--accent) 11%, transparent) var(--accent-shift)
+  );
+  --crt-dots: color-mix(
+    in srgb,
+    #aaffec38,
+    color-mix(in srgb, var(--accent) 22%, transparent) var(--accent-shift)
+  );
+  --crt-glow: color-mix(
+    in srgb,
+    #1cd9c41a,
+    color-mix(in srgb, var(--accent) 10%, transparent) var(--accent-shift)
+  );
+  transition: --accent 1.8s ease, --accent-shift 1.8s ease;
   font-family: var(--font-display);
   color: var(--ink);
   background: var(--bg);
@@ -100,7 +180,7 @@ button {
   color: transparent;
   font: 400 160px/1 var(--font-display);
   -webkit-text-stroke: 1px var(--accent);
-  filter: drop-shadow(0 0 8px #8effdc38);
+  filter: drop-shadow(0 0 8px var(--boot-glow));
 }
 .boot-omega-outline,
 .boot-omega-fill {
@@ -113,7 +193,7 @@ button {
   overflow: hidden;
   color: var(--accent);
   -webkit-text-stroke: 0;
-  text-shadow: 0 0 16px #8effdc8a;
+  text-shadow: 0 0 16px var(--boot-text-glow);
   clip-path: inset(var(--load-top) 0 0 0);
   transition: clip-path 0.12s linear;
 }
@@ -179,7 +259,7 @@ button {
   background: linear-gradient(90deg, #020608ee 0%, #020608c9 75%, #02060848 100%);
   box-shadow:
     16px 0 60px #0008,
-    inset -1px 0 #8effdc12;
+    inset -1px 0 var(--rail-glow);
 }
 .wordmark {
   max-width: 100%;
@@ -227,7 +307,7 @@ button {
   padding: 9px 0;
   border: 0;
   background: none;
-  color: #82a49c;
+  color: var(--dial-idle);
   text-align: left;
   font: 400 clamp(17px, 2vw, 30px)/1.15 var(--font-display);
   letter-spacing: -0.055em;
@@ -279,8 +359,8 @@ button {
   border-radius: 0;
   background: linear-gradient(145deg, #061311f2, #020708f5 68%);
   box-shadow:
-    0 0 28px #42f5ce12,
-    inset 0 0 34px #29d8bc0c;
+    0 0 28px var(--card-glow),
+    inset 0 0 34px var(--card-inner-glow);
   overflow: auto;
   animation: panel-in 0.28s ease-out;
 }
@@ -343,9 +423,11 @@ button {
 }
 .track-artwork img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 .now-playing > span:last-child {
   color: var(--muted);
@@ -366,6 +448,16 @@ button {
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+}
+.waveform-interaction {
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.waveform-interaction:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
 }
 .timeline {
   display: flex;
@@ -388,7 +480,7 @@ button {
   background: linear-gradient(
     90deg,
     var(--accent) 0 var(--timeline-progress),
-    #46635d var(--timeline-progress) 100%
+    var(--timeline-track) var(--timeline-progress) 100%
   );
 }
 .timeline input::-webkit-slider-thumb {
@@ -399,11 +491,11 @@ button {
   border: 0;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 8px #8effdc66;
+  box-shadow: 0 0 8px var(--control-glow);
 }
 .timeline input::-moz-range-track {
   height: 3px;
-  background: #46635d;
+  background: var(--timeline-track);
 }
 .timeline input::-moz-range-progress {
   height: 3px;
@@ -415,7 +507,7 @@ button {
   border: 0;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 8px #8effdc66;
+  box-shadow: 0 0 8px var(--control-glow);
 }
 .player-controls {
   display: flex;
@@ -441,7 +533,7 @@ button {
   height: 48px;
   border: 1px solid var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 15px #8effdc30;
+  box-shadow: 0 0 15px var(--play-glow);
 }
 .track-list {
   border-top: 1px solid var(--line);
@@ -461,7 +553,7 @@ button {
   min-height: 37px;
   padding: 7px 0;
   border: 0;
-  border-top: 1px solid #4ad9c51c;
+  border-top: 1px solid var(--track-divider);
   background: transparent;
   text-align: left;
 }
@@ -517,14 +609,14 @@ button {
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(#aaffec38 0.55px, transparent 0.8px),
+    radial-gradient(var(--crt-dots) 0.55px, transparent 0.8px),
     repeating-linear-gradient(0deg, #02060620 0 1px, transparent 1px 4px);
   background-size:
     5px 5px,
     auto;
   box-shadow:
     inset 0 0 120px #000a,
-    inset 0 0 26px #1cd9c41a;
+    inset 0 0 26px var(--crt-glow);
   opacity: 0.32;
 }
 .crt-overlay::after {
