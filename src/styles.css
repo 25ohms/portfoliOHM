@@ -21,6 +21,7 @@
   );
   --default-accent: #8effdc;
   --accent: #8effdc;
+  --card-surface: #030a09;
   --line: color-mix(
     in srgb,
     #4ad9c52e,
@@ -86,7 +87,9 @@
     #1cd9c41a,
     color-mix(in srgb, var(--accent) 10%, transparent) var(--accent-shift)
   );
-  transition: --accent 1.8s ease, --accent-shift 1.8s ease;
+  transition:
+    --accent 1.8s ease,
+    --accent-shift 1.8s ease;
   font-family: var(--font-display);
   color: var(--ink);
   background: var(--bg);
@@ -357,20 +360,40 @@ button {
   padding: clamp(20px, 3vw, 38px);
   border: 1px solid var(--accent);
   border-radius: 0;
-  background: linear-gradient(145deg, #061311f2, #020708f5 68%);
+  background: var(--card-surface);
   box-shadow:
     0 0 28px var(--card-glow),
     inset 0 0 34px var(--card-inner-glow);
   overflow: auto;
   animation: panel-in 0.28s ease-out;
 }
+.audio-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.audio-card > .card-heading {
+  flex: 0 0 auto;
+  border-bottom: 0;
+}
 .card-heading {
+  position: relative;
+  z-index: 5;
+  overflow: visible;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--line);
+  background: var(--card-surface);
+}
+.audio-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 .eyebrow,
 .live-indicator,
@@ -413,21 +436,49 @@ button {
   font-family: var(--font-display);
 }
 .track-artwork {
-  display: grid;
-  place-items: center;
   width: 100%;
-  height: clamp(170px, 24svh, 300px);
-  margin-top: 20px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  margin: 20px 0 0 auto;
+}
+.artwork-visual {
+  position: absolute;
+  top: var(--artwork-top, calc(100% + 20px));
+  right: 0;
+  z-index: 6;
+  width: var(--artwork-width, 100%);
+  aspect-ratio: 1;
   overflow: hidden;
   background: radial-gradient(ellipse at 50% 40%, #18433c 0, #081412 56%, #030707 100%);
+  pointer-events: none;
 }
-.track-artwork img {
+.artwork-visual img {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+}
+.artwork-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #030608cc;
+  color: var(--accent);
+  font: 17px/1 var(--font-ui);
+  pointer-events: auto;
+}
+.artwork-toggle[aria-expanded='false'] {
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
 }
 .now-playing > span:last-child {
   color: var(--muted);

@@ -8,6 +8,7 @@ export type SoundCloudTrack = {
   title?: string
   artwork_url?: string
   waveform_url?: string
+  duration?: number
   user?: { username?: string }
 }
 type SoundCloudProgress = { currentPosition?: number; duration?: number }
@@ -55,6 +56,18 @@ type PlayerState = {
 const PlayerContext = createContext<PlayerState | null>(null)
 const WAVEFORM_CACHE_KEY = '25ohms.waveforms.v1'
 
+function sameTrack(first: SoundCloudTrack | null, second: SoundCloudTrack) {
+  if (!first) return false
+  if (first.id != null && second.id != null) return String(first.id) === String(second.id)
+  return first.title === second.title
+}
+
+function soundDuration(sound: SoundCloudTrack) {
+  return typeof sound.duration === 'number' && Number.isFinite(sound.duration) && sound.duration > 0
+    ? sound.duration
+    : 0
+}
+
 function cachedWaveforms(): Record<string, number[]> {
   try {
     const value = JSON.parse(localStorage.getItem(WAVEFORM_CACHE_KEY) || '{}') as Record<
@@ -80,6 +93,8 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
   const widget = useRef<SoundCloudWidget | null>(null)
   const tracksRef = useRef<SoundCloudTrack[]>([])
   const trackIndexRef = useRef(0)
+  const currentTrackRef = useRef<SoundCloudTrack | null>(null)
+  const durationRef = useRef(0)
   const [tracks, setTracks] = useState<SoundCloudTrack[]>([])
   const [waveforms, setWaveforms] = useState<Record<string, number[]>>(cachedWaveforms)
   const cachedWaveformsRef = useRef(waveforms)
@@ -141,7 +156,13 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
           })
         })
         player.getCurrentSound((sound) => {
-          if (mounted) setCurrentTrack(sound)
+          if (!mounted) return
+          currentTrackRef.current = sound
+          setCurrentTrack(sound)
+          if (soundDuration(sound)) {
+            durationRef.current = soundDuration(sound)
+            setDuration(durationRef.current)
+          }
         })
         player.getCurrentSoundIndex((index) => {
           if (!mounted) return
@@ -149,13 +170,29 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
           setTrackIndex(index)
         })
         player.getDuration((value) => {
-          if (mounted) setDuration(value)
+          if (!mounted) return
+          durationRef.current = value
+          setDuration(value)
         })
       })
       player.bind(events.PLAY, () => {
         if (mounted) setPlaying(true)
         player.getCurrentSound((sound) => {
-          if (mounted) setCurrentTrack(sound)
+          if (!mounted) return
+          if (!sameTrack(currentTrackRef.current, sound)) {
+            currentTrackRef.current = sound
+            setPosition(0)
+            durationRef.current = soundDuration(sound)
+            setDuration(durationRef.current)
+            if (!durationRef.current) {
+              player.getDuration((value) => {
+                if (!mounted) return
+                durationRef.current = value
+                setDuration(value)
+              })
+            }
+          }
+          setCurrentTrack(sound)
         })
         player.getCurrentSoundIndex((index) => {
           if (!mounted) return
@@ -169,12 +206,19 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
       player.bind(events.FINISH, () => player.next())
       player.bind(events.PLAY_PROGRESS, (data) => {
         if (!mounted || !data) return
-        setPosition(data.currentPosition || 0)
-        if (data.duration) setDuration(data.duration)
+        if (data.duration && Number.isFinite(data.duration) && data.duration > 0) {
+          durationRef.current = data.duration
+          setDuration(data.duration)
+        }
+        const currentDuration = data.duration || durationRef.current
+        const currentPosition = data.currentPosition || 0
+        setPosition(currentDuration ? Math.min(currentPosition, currentDuration) : currentPosition)
       })
       player.bind(events.LOAD_PROGRESS, () =>
         player.getDuration((value) => {
-          if (mounted) setDuration(value)
+          if (!mounted) return
+          durationRef.current = value
+          setDuration(value)
         }),
       )
     }

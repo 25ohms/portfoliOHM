@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useSoundCloudPlayer } from '../audio/SoundCloudPlayer'
 import Waveform from './Waveform'
 
@@ -8,8 +8,8 @@ function formatTime(milliseconds: number) {
   return `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, '0')}`
 }
 
-function largeArtwork(url?: string) {
-  return url?.replace(/-large(?=\.)/, '-t500x500')
+function fullArtwork(url?: string) {
+  return url?.replace(/-(?:large|t500x500)(?=\.)/, '-original')
 }
 
 function titleCase(title: string) {
@@ -127,7 +127,59 @@ async function artworkAccentColor(url: string, signal: AbortSignal): Promise<Col
 
 export default function AudioCard() {
   const player = useSoundCloudPlayer()
-  const artworkUrl = largeArtwork(player.currentTrack?.artwork_url)
+  const scrollArea = useRef<HTMLDivElement>(null)
+  const headingElement = useRef<HTMLElement>(null)
+  const headingTitleElement = useRef<HTMLHeadingElement>(null)
+  const artworkElement = useRef<HTMLDivElement>(null)
+  const artworkExpandedRef = useRef(true)
+  const collapseDistance = useRef(1)
+  const [artworkExpanded, setArtworkExpanded] = useState(true)
+  const artworkUrl = fullArtwork(player.currentTrack?.artwork_url)
+  const displayedPosition = player.duration ? Math.min(player.position, player.duration) : 0
+
+  useEffect(() => {
+    const element = scrollArea.current
+    const heading = headingElement.current
+    const headingTitle = headingTitleElement.current
+    const artwork = artworkElement.current
+    if (!element || !heading || !headingTitle || !artwork) return
+    let frame = 0
+    const updateArtworkSize = () => {
+      frame = 0
+      const maximumWidth = element.clientWidth
+      const headingTitleHeight = headingTitle.getBoundingClientRect().height
+      const minimumWidth = Math.min(headingTitleHeight, maximumWidth)
+      const distance = Math.max(1, maximumWidth - minimumWidth)
+      const progress = Math.max(0, Math.min(1, element.scrollTop / distance))
+      const mappedWidth = maximumWidth - (maximumWidth - minimumWidth) * progress
+      const expandedTop = heading.clientHeight + 20
+      const collapsedTop =
+        headingTitle.getBoundingClientRect().top - heading.getBoundingClientRect().top
+      const artworkTop = expandedTop + (collapsedTop - expandedTop) * progress
+      collapseDistance.current = distance
+      artwork.style.setProperty('--artwork-width', `${mappedWidth}px`)
+      artwork.style.setProperty('--artwork-top', `${artworkTop}px`)
+      const expanded = progress < 0.5
+      if (expanded !== artworkExpandedRef.current) {
+        artworkExpandedRef.current = expanded
+        setArtworkExpanded(expanded)
+      }
+    }
+    const scheduleUpdate = () => {
+      if (!frame) frame = requestAnimationFrame(updateArtworkSize)
+    }
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(element)
+    resizeObserver.observe(heading)
+    resizeObserver.observe(headingTitle)
+    element.addEventListener('scroll', scheduleUpdate, { passive: true })
+    updateArtworkSize()
+    return () => {
+      element.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [artworkUrl])
 
   useEffect(() => {
     const root = document.documentElement
@@ -147,113 +199,136 @@ export default function AudioCard() {
       return
     }
     const controller = new AbortController()
-    void artworkAccentColor(artworkUrl, controller.signal).then((color) => {
-      root.style.setProperty(
-        '--accent',
-        color ? `rgb(${color.map(Math.round).join(' ')})` : originalAccent || '#8effdc',
-      )
-      root.style.setProperty('--accent-shift', color ? '100%' : '0%')
-    }).catch(() => {
-      if (controller.signal.aborted) return
-      root.style.setProperty('--accent', originalAccent || '#8effdc')
-      root.style.setProperty('--accent-shift', '0%')
-      // Cross-origin artwork may not allow pixel access; the default palette remains usable.
-    })
+    void artworkAccentColor(artworkUrl, controller.signal)
+      .then((color) => {
+        root.style.setProperty(
+          '--accent',
+          color ? `rgb(${color.map(Math.round).join(' ')})` : originalAccent || '#8effdc',
+        )
+        root.style.setProperty('--accent-shift', color ? '100%' : '0%')
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        root.style.setProperty('--accent', originalAccent || '#8effdc')
+        root.style.setProperty('--accent-shift', '0%')
+        // Cross-origin artwork may not allow pixel access; the default palette remains usable.
+      })
     return () => controller.abort()
   }, [artworkUrl])
 
   return (
     <section className="content-card audio-card" aria-label="Audio player">
-      <header className="card-heading">
+      <header ref={headingElement} className="card-heading">
         <div>
-          <h2>Audio</h2>
+          <h2 ref={headingTitleElement}>Audio</h2>
         </div>
-      </header>
-      <div className="track-artwork">
-        {artworkUrl && <img src={artworkUrl} alt="" />}
-      </div>
-      <div className="now-playing">
-        <span className="eyebrow">NOW PLAYING</span>
-        <strong className={`now-playing-title is-${titleCase(player.currentTrack?.title || '')}`}>
-          {player.currentTrack?.title || 'Select a track'}
-        </strong>
-        <span>25OHMS / SOUNDCLOUD</span>
-      </div>
-      <div className="waveform">
-        <Waveform
-          peaks={
-            player.currentTrack?.waveform_url
-              ? player.waveforms[player.currentTrack.waveform_url]
-              : undefined
-          }
-          progress={player.duration ? player.position / player.duration : 0}
-          ready={player.waveformsReady}
-          onSeek={(progress) => player.seekTo(progress * player.duration)}
-        />
-      </div>
-      <div className="timeline">
-        <span>{formatTime(player.position)}</span>
-        <input
-          aria-label="Track position"
-          type="range"
-          min="0"
-          max={player.duration || 1}
-          value={Math.min(player.position, player.duration || 1)}
-          onChange={(event) => player.seekTo(Number(event.target.value))}
-          style={
-            {
-              '--timeline-progress': `${player.duration ? (player.position / player.duration) * 100 : 0}%`,
-            } as CSSProperties
-          }
-        />
-        <span>{formatTime(player.duration)}</span>
-      </div>
-      <div className="player-controls">
-        <button
-          aria-label="Previous track"
-          onClick={() => player.changeTrack(player.trackIndex - 1)}
-        >
-          ◂◂
-        </button>
-        <button
-          className="play-button"
-          aria-label={player.playing ? 'Pause' : 'Play'}
-          onClick={player.togglePlayback}
-        >
-          {player.playing ? 'Ⅱ' : '▶'}
-        </button>
-        <button aria-label="Next track" onClick={() => player.changeTrack(player.trackIndex + 1)}>
-          ▸▸
-        </button>
-      </div>
-      <div className="track-list">
-        <div className="track-list-head">
-          <span>TRACK INDEX</span>
-          <span>
-            {player.tracks.length
-              ? `${String(player.trackIndex + 1).padStart(2, '0')} / ${String(player.tracks.length).padStart(2, '0')}`
-              : 'LOADING'}
-          </span>
-        </div>
-        {player.tracks.length ? (
-          player.tracks.map((track, index) => (
+        {artworkUrl && (
+          <div ref={artworkElement} className="artwork-visual">
+            <img src={artworkUrl} alt="" />
             <button
-              key={`${index}-${track}`}
-              className={`track-row${index === player.trackIndex ? ' is-current' : ''}`}
-              onClick={() => player.changeTrack(index)}
+              className="artwork-toggle"
+              type="button"
+              aria-label={artworkExpanded ? 'Collapse artwork' : 'Expand artwork'}
+              aria-expanded={artworkExpanded}
+              onClick={() => {
+                scrollArea.current?.scrollTo({
+                  top: artworkExpanded ? collapseDistance.current : 0,
+                  behavior: 'smooth',
+                })
+              }}
             >
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <span className="track-row-title">{track.title || 'Untitled track'}</span>
-              <span>{index === player.trackIndex && player.playing ? '▮▮' : '▶'}</span>
+              {artworkExpanded ? '−' : '↗'}
             </button>
-          ))
-        ) : (
-          <p className="track-loading">Fetching all tracks from the archive…</p>
+          </div>
         )}
+      </header>
+      <div ref={scrollArea} className="audio-card-body">
+        {artworkUrl && <div className="track-artwork" aria-hidden="true" />}
+        <div className="now-playing">
+          <span className="eyebrow">NOW PLAYING</span>
+          <strong className={`now-playing-title is-${titleCase(player.currentTrack?.title || '')}`}>
+            {player.currentTrack?.title || 'Select a track'}
+          </strong>
+          <span>25OHMS / SOUNDCLOUD</span>
+        </div>
+        <div className="waveform">
+          <Waveform
+            peaks={
+              player.currentTrack?.waveform_url
+                ? player.waveforms[player.currentTrack.waveform_url]
+                : undefined
+            }
+            progress={player.duration ? displayedPosition / player.duration : 0}
+            ready={player.waveformsReady}
+            onSeek={(progress) => {
+              if (player.duration) player.seekTo(progress * player.duration)
+            }}
+          />
+        </div>
+        <div className="timeline">
+          <span>{formatTime(displayedPosition)}</span>
+          <input
+            aria-label="Track position"
+            type="range"
+            min="0"
+            max={player.duration || 1}
+            value={Math.min(displayedPosition, player.duration || 1)}
+            onChange={(event) => player.seekTo(Number(event.target.value))}
+            style={
+              {
+                '--timeline-progress': `${player.duration ? (player.position / player.duration) * 100 : 0}%`,
+              } as CSSProperties
+            }
+          />
+          <span>{formatTime(player.duration)}</span>
+        </div>
+        <div className="player-controls">
+          <button
+            aria-label="Previous track"
+            onClick={() => player.changeTrack(player.trackIndex - 1)}
+          >
+            ◂◂
+          </button>
+          <button
+            className="play-button"
+            aria-label={player.playing ? 'Pause' : 'Play'}
+            onClick={player.togglePlayback}
+          >
+            {player.playing ? 'Ⅱ' : '▶'}
+          </button>
+          <button aria-label="Next track" onClick={() => player.changeTrack(player.trackIndex + 1)}>
+            ▸▸
+          </button>
+        </div>
+        <div className="track-list">
+          <div className="track-list-head">
+            <span>TRACK INDEX</span>
+            <span>
+              {player.tracks.length
+                ? `${String(player.trackIndex + 1).padStart(2, '0')} / ${String(player.tracks.length).padStart(2, '0')}`
+                : 'LOADING'}
+            </span>
+          </div>
+          {player.tracks.length ? (
+            player.tracks.map((track, index) => (
+              <button
+                key={`${index}-${track}`}
+                className={`track-row${index === player.trackIndex ? ' is-current' : ''}`}
+                onClick={() => player.changeTrack(index)}
+              >
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <span className="track-row-title">{track.title || 'Untitled track'}</span>
+                <span>{index === player.trackIndex && player.playing ? '▮▮' : '▶'}</span>
+              </button>
+            ))
+          ) : (
+            <p className="track-loading">Fetching all tracks from the archive…</p>
+          )}
+        </div>
+        <a className="card-link" href={soundCloudUrl} target="_blank" rel="noreferrer">
+          OPEN SOUNDCLOUD ↗
+        </a>
       </div>
-      <a className="card-link" href={soundCloudUrl} target="_blank" rel="noreferrer">
-        OPEN SOUNDCLOUD ↗
-      </a>
     </section>
   )
 }
