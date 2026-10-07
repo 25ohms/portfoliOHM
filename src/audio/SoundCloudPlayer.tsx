@@ -48,6 +48,9 @@ type PlayerState = {
   playing: boolean
   duration: number
   position: number
+  artworkAccent: string | null
+  setArtworkAccent: (color: string | null) => void
+  skipTrack: (direction: -1 | 1) => void
   changeTrack: (index: number) => void
   togglePlayback: () => void
   seekTo: (milliseconds: number) => void
@@ -104,6 +107,7 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
   const [playing, setPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
   const [position, setPosition] = useState(0)
+  const [artworkAccent, setArtworkAccent] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -203,7 +207,14 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
       player.bind(events.PAUSE, () => {
         if (mounted) setPlaying(false)
       })
-      player.bind(events.FINISH, () => player.next())
+      player.bind(events.FINISH, () => {
+        const length = tracksRef.current.length
+        if (!length) return
+        const target = (trackIndexRef.current + 1) % length
+        player.skip(target)
+        trackIndexRef.current = target
+        setTrackIndex(target)
+      })
       player.bind(events.PLAY_PROGRESS, (data) => {
         if (!mounted || !data) return
         if (data.duration && Number.isFinite(data.duration) && data.duration > 0) {
@@ -250,6 +261,16 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
     setTrackIndex(target)
   }
 
+  const skipTrack = (direction: -1 | 1) => {
+    const length = tracksRef.current.length
+    if (!length) return
+    const current = trackIndexRef.current
+    const target = (current + direction + length) % length
+    widget.current?.skip(target)
+    trackIndexRef.current = target
+    setTrackIndex(target)
+  }
+
   return {
     tracks,
     waveforms,
@@ -259,6 +280,9 @@ function useSoundCloudPlayerState(iframe: React.RefObject<HTMLIFrameElement | nu
     playing,
     duration,
     position,
+    artworkAccent,
+    setArtworkAccent,
+    skipTrack,
     changeTrack,
     togglePlayback: () => (playing ? widget.current?.pause() : widget.current?.play()),
     seekTo: (milliseconds: number) => widget.current?.seekTo(milliseconds),

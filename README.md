@@ -33,6 +33,8 @@ src/
   App.tsx                  Radial menu, audio card, and link panels
   styles.css               Layout, typography, effects, and responsive rules
   audio/SoundCloudPlayer.tsx  SoundCloud widget and shared player state
+  audio/NowPlayingBar.tsx     Persistent compact player outside the audio menu
+  audio/NowPlayingBar.tsx     Persistent compact player outside the audio menu
   cards/AudioCard.tsx       Audio menu content panel
   config/scene.ts          Scene defaults, types, and validation
   data/artist.ts           Public links and portfolio copy
@@ -64,6 +66,8 @@ reference/
 ```
 
 `dist/`, `node_modules/`, and browser/test outputs are generated or installed locally and can be recreated. `npm run clean` removes generated output.
+
+The 2K12 display font is served from `public/fonts/the-2k12.ttf`, so Vite includes it with production output and every installation uses the same local font. The SoundCloud now playing bar stays available across menu sections and shares the audio card's artwork accent and seekable waveform.
 
 ## Triage before removal
 

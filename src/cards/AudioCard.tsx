@@ -127,6 +127,7 @@ async function artworkAccentColor(url: string, signal: AbortSignal): Promise<Col
 
 export default function AudioCard() {
   const player = useSoundCloudPlayer()
+  const { setArtworkAccent } = player
   const scrollArea = useRef<HTMLDivElement>(null)
   const headingElement = useRef<HTMLElement>(null)
   const headingTitleElement = useRef<HTMLHeadingElement>(null)
@@ -182,39 +183,28 @@ export default function AudioCard() {
   }, [artworkUrl])
 
   useEffect(() => {
-    const root = document.documentElement
     return () => {
-      const originalAccent = getComputedStyle(root).getPropertyValue('--default-accent').trim()
-      root.style.setProperty('--accent', originalAccent || '#8effdc')
-      root.style.setProperty('--accent-shift', '0%')
+      setArtworkAccent(null)
     }
-  }, [])
+  }, [setArtworkAccent])
 
   useEffect(() => {
-    const root = document.documentElement
-    const originalAccent = getComputedStyle(root).getPropertyValue('--default-accent').trim()
     if (!artworkUrl) {
-      root.style.setProperty('--accent', originalAccent || '#8effdc')
-      root.style.setProperty('--accent-shift', '0%')
+      setArtworkAccent(null)
       return
     }
     const controller = new AbortController()
     void artworkAccentColor(artworkUrl, controller.signal)
       .then((color) => {
-        root.style.setProperty(
-          '--accent',
-          color ? `rgb(${color.map(Math.round).join(' ')})` : originalAccent || '#8effdc',
-        )
-        root.style.setProperty('--accent-shift', color ? '100%' : '0%')
+        setArtworkAccent(color ? `rgb(${color.map(Math.round).join(' ')})` : null)
       })
       .catch(() => {
         if (controller.signal.aborted) return
-        root.style.setProperty('--accent', originalAccent || '#8effdc')
-        root.style.setProperty('--accent-shift', '0%')
+        setArtworkAccent(null)
         // Cross-origin artwork may not allow pixel access; the default palette remains usable.
       })
     return () => controller.abort()
-  }, [artworkUrl])
+  }, [artworkUrl, setArtworkAccent])
 
   return (
     <section className="content-card audio-card" aria-label="Audio player">
@@ -283,10 +273,7 @@ export default function AudioCard() {
           <span>{formatTime(player.duration)}</span>
         </div>
         <div className="player-controls">
-          <button
-            aria-label="Previous track"
-            onClick={() => player.changeTrack(player.trackIndex - 1)}
-          >
+          <button aria-label="Previous track" onClick={() => player.skipTrack(-1)}>
             ◂◂
           </button>
           <button
@@ -296,7 +283,7 @@ export default function AudioCard() {
           >
             {player.playing ? 'Ⅱ' : '▶'}
           </button>
-          <button aria-label="Next track" onClick={() => player.changeTrack(player.trackIndex + 1)}>
+          <button aria-label="Next track" onClick={() => player.skipTrack(1)}>
             ▸▸
           </button>
         </div>

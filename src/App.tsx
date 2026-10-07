@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import AudioCard from './cards/AudioCard'
-import { SoundCloudPlayerProvider } from './audio/SoundCloudPlayer'
+import { SoundCloudPlayerProvider, useSoundCloudPlayer } from './audio/SoundCloudPlayer'
+import NowPlayingBar from './audio/NowPlayingBar'
 import LoadingScreen from './components/LoadingScreen'
 import { socialLinks } from './data/artist'
 
@@ -13,7 +14,18 @@ const dialItems = [
   { label: 'Shows', href: 'https://ra.co/dj/25ohms' },
   { label: 'Contact', href: socialLinks.instagram.href },
 ]
+const scrollableCardSelector = '.content-card, .audio-card-body'
+
 export default function App() {
+  return (
+    <SoundCloudPlayerProvider>
+      <PortfolioExperience />
+    </SoundCloudPlayerProvider>
+  )
+}
+
+function PortfolioExperience() {
+  const player = useSoundCloudPlayer()
   const [selected, setSelected] = useState(0)
   const [sceneSettled, setSceneSettled] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -60,8 +72,42 @@ export default function App() {
 
   const settleScene = useCallback(() => setSceneSettled(true), [])
 
+  useEffect(() => {
+    const root = document.documentElement
+    const accent = selected === 1 ? player.artworkAccent : null
+    root.style.setProperty(
+      '--accent',
+      accent || root.style.getPropertyValue('--default-accent') || '#8effdc',
+    )
+    root.style.setProperty('--accent-shift', accent ? '100%' : '0%')
+  }, [selected, player.artworkAccent])
+
+  useEffect(() => {
+    const timers = new Map<HTMLElement, number>()
+    const onScroll = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement) || !target.matches(scrollableCardSelector)) return
+      if (target.scrollHeight <= target.clientHeight + 1) return
+      target.classList.add('is-scrolling')
+      const existing = timers.get(target)
+      if (existing) window.clearTimeout(existing)
+      timers.set(
+        target,
+        window.setTimeout(() => {
+          target.classList.remove('is-scrolling')
+          timers.delete(target)
+        }, 700),
+      )
+    }
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      window.removeEventListener('scroll', onScroll, true)
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [])
+
   return (
-    <SoundCloudPlayerProvider>
+    <>
       <main
         className={`experience${selected === 0 ? ' is-home' : ' has-card'}${siteReady ? ' is-revealed' : ' is-loading'}`}
         aria-label="25ohms portfolio"
@@ -124,10 +170,11 @@ export default function App() {
         </aside>
         {selected === 0 && (
           <section className="hero-copy" id="home" aria-live="polite">
-            <h1>
-              between man
-              <br />
-              &amp; machine
+            <h1 aria-label="between MAN and MACHINE">
+              <span className="hero-title-word">between</span>
+              <span className="hero-title-emphasis hero-title-man">MAN</span>
+              <span className="hero-title-word hero-title-and">and</span>
+              <span className="hero-title-emphasis hero-title-machine">MACHINE</span>
             </h1>
           </section>
         )}
@@ -146,9 +193,10 @@ export default function App() {
             </a>
           </section>
         )}
+        <NowPlayingBar hidden={selected === 1 || !siteReady || !player.currentTrack} />
         <div className="crt-overlay" aria-hidden="true" />
       </main>
       {!loaderRemoved && <LoadingScreen progress={loadingProgress} leaving={siteReady} />}
-    </SoundCloudPlayerProvider>
+    </>
   )
 }
