@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { useSoundCloudPlayer } from './SoundCloudPlayer'
+import { useMusicPlayer } from './MusicPlayer'
 import Waveform from '../cards/Waveform'
 
-function fullArtwork(url?: string) {
-  return url?.replace(/-(?:large|t500x500)(?=\.)/, '-original')
-}
-
 export default function NowPlayingBar({ hidden }: { hidden: boolean }) {
-  const player = useSoundCloudPlayer()
+  const player = useMusicPlayer()
   const artworkCanvas = useRef<HTMLCanvasElement>(null)
   const [artworkFallback, setArtworkFallback] = useState(false)
-  const artwork = fullArtwork(player.currentTrack?.artwork_url)
+  const artwork = player.currentTrack?.artworkUrl
   const progress = player.duration ? player.position / player.duration : 0
   const accent =
     player.artworkAccent ||
     getComputedStyle(document.documentElement).getPropertyValue('--default-accent').trim() ||
     '#8effdc'
+
+  useEffect(() => {
+    if (!hidden && player.playing && player.currentTrack) {
+      player.requestWaveform(player.currentTrack)
+    }
+  }, [hidden, player.currentTrack, player.playing, player.requestWaveform])
 
   useEffect(() => {
     const canvas = artworkCanvas.current
@@ -106,15 +108,11 @@ export default function NowPlayingBar({ hidden }: { hidden: boolean }) {
       </button>
       <div className="now-playing-bar-track">
         <span className="now-playing-bar-label">NOW PLAYING</span>
-        <strong>{player.currentTrack?.title || 'SoundCloud'}</strong>
+        <strong>{player.currentTrack?.title || 'No track selected'}</strong>
       </div>
       <div className="now-playing-bar-waveform">
         <Waveform
-          peaks={
-            player.currentTrack?.waveform_url
-              ? player.waveforms[player.currentTrack.waveform_url]
-              : undefined
-          }
+          peaks={player.currentTrack ? player.waveforms[player.currentTrack.id] : undefined}
           progress={progress}
           ready={player.waveformsReady}
           onSeek={(value) => player.duration && player.seekTo(value * player.duration)}

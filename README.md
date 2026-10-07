@@ -34,12 +34,12 @@ src/
   App.tsx                  Radial menu, audio card, and link panels
   styles.css               Layout, typography, effects, and responsive rules
   audio/
-    SoundCloudPlayer.tsx   SoundCloud widget and shared player state
+    MusicPlayer.tsx       R2 catalogue and persistent audio state
     NowPlayingBar.tsx      Persistent compact player outside the audio menu
   components/LoadingScreen.tsx  Startup progress and transition overlay
   cards/
     AudioCard.tsx          Audio menu content panel
-    Waveform.tsx           Track waveform display and seek control
+    Waveform.tsx           Peak based bars and seek control
   config/scene.ts          Scene defaults, types, and validation
   data/artist.ts           Public links and portfolio copy
   scene/
@@ -72,7 +72,7 @@ docs/                      Local, ignored design notes (not included in Git)
 
 `dist/`, `node_modules/`, and browser/test outputs are generated or installed locally and can be recreated. `npm run clean` removes generated output.
 
-The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The SoundCloud now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable waveform.
+The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order and track names come from the bucket's `music/indexing.txt` and project `tracklist.txt` files. Waveform peaks are calculated in browser memory and are not persisted locally.
 
 Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu.
 
