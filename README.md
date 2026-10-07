@@ -26,16 +26,20 @@ vite.config.ts             Development server and production bundler
 vitest.config.ts           Unit test discovery
 playwright.config.ts       Browser test projects and server settings
 eslint.config.js           Lint rules
+.prettierrc.json           Formatting preferences
 .gitignore                 Generated, local, and secret files to ignore
 README.md                  Setup and project guide
 src/
   main.tsx                 React bootstrap, font import, and CSS import
   App.tsx                  Radial menu, audio card, and link panels
   styles.css               Layout, typography, effects, and responsive rules
-  audio/SoundCloudPlayer.tsx  SoundCloud widget and shared player state
-  audio/NowPlayingBar.tsx     Persistent compact player outside the audio menu
-  audio/NowPlayingBar.tsx     Persistent compact player outside the audio menu
-  cards/AudioCard.tsx       Audio menu content panel
+  audio/
+    SoundCloudPlayer.tsx   SoundCloud widget and shared player state
+    NowPlayingBar.tsx      Persistent compact player outside the audio menu
+  components/LoadingScreen.tsx  Startup progress and transition overlay
+  cards/
+    AudioCard.tsx          Audio menu content panel
+    Waveform.tsx           Track waveform display and seek control
   config/scene.ts          Scene defaults, types, and validation
   data/artist.ts           Public links and portfolio copy
   scene/
@@ -63,17 +67,20 @@ tests/portfolio.spec.ts    Browser-level portfolio checks
 reference/
   artist_info/             Artist source notes
   TDReference/             TouchDesigner reference project
+docs/                      Local, ignored design notes (not included in Git)
 ```
 
 `dist/`, `node_modules/`, and browser/test outputs are generated or installed locally and can be recreated. `npm run clean` removes generated output.
 
-The 2K12 display font is served from `public/fonts/the-2k12.ttf`, so Vite includes it with production output and every installation uses the same local font. The SoundCloud now playing bar stays available across menu sections and shares the audio card's artwork accent and seekable waveform.
+The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The SoundCloud now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable waveform.
 
 ## Triage before removal
 
 - `src/data/artist.ts` exports `navigation`, `biography`, and `portfolioSections` that are not currently imported. Review whether to keep this future content or remove the unused exports; `socialLinks` is active.
 - `reference/artist_info/` and `reference/TDReference/` are not loaded by the site. Confirm whether these source notes and the TouchDesigner project should remain archived before removing them.
 - `@fontsource-variable/dm-sans` is in `package.json` but has no source imports. Confirm whether it is planned before removing the dependency.
+- `.nvmrc` specifies Node 24 but is ignored by `.gitignore`, so a fresh checkout does not receive the version pin. Decide whether to track it or keep the Node requirement documented here.
+- `docs/website-styling.md` is ignored and local-only; decide whether it remains useful as an archive or should be removed. `docs/.website-styling.md.swp` is an editor swap file and appears to be temporary output.
 
 ## Common commands
 
