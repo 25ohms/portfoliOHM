@@ -202,22 +202,14 @@ button {
   width: 320px;
   height: 320px;
   filter: drop-shadow(0 0 8px var(--boot-glow));
+  transition: filter 0.3s ease;
 }
-.boot-omega-outline,
-.boot-omega-fill {
-  position: absolute;
-  inset: 0;
-  background: var(--accent);
-  -webkit-mask: center / contain no-repeat url('/logos/ohmLOGO_2.png');
-  mask: center / contain no-repeat url('/logos/ohmLOGO_2.png');
+.boot-omega.is-complete {
+  filter: drop-shadow(0 0 8px var(--boot-glow)) drop-shadow(0 0 5px var(--accent));
 }
-.boot-omega-outline {
-  opacity: 0.38;
-}
-.boot-omega-fill {
-  overflow: hidden;
-  clip-path: inset(var(--load-top) 0 0 0);
-  transition: clip-path 0.12s linear;
+.boot-omega-canvas {
+  width: 320px;
+  height: 320px;
 }
 .scene-layer {
   position: absolute;
@@ -344,8 +336,8 @@ button {
   width: 2em;
   height: 2em;
   background: currentColor;
-  -webkit-mask: center / contain no-repeat url('/logos/ohmLOGO_2.png');
-  mask: center / contain no-repeat url('/logos/ohmLOGO_2.png');
+  -webkit-mask: center / contain no-repeat url('/logos/ohmLOGO_3.png');
+  mask: center / contain no-repeat url('/logos/ohmLOGO_3.png');
 }
 .dial-item.is-selected {
   transform: translateY(-50%) scale(1);
