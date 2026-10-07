@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import AudioCard from './cards/AudioCard'
 import { SoundCloudPlayerProvider } from './audio/SoundCloudPlayer'
+import LoadingScreen from './components/LoadingScreen'
 import { socialLinks } from './data/artist'
 
 const HeroScene = lazy(() => import('./scene/HeroScene'))
@@ -14,6 +15,10 @@ const dialItems = [
 ]
 export default function App() {
   const [selected, setSelected] = useState(0)
+  const [sceneSettled, setSceneSettled] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+  const [siteReady, setSiteReady] = useState(false)
+  const [loaderRemoved, setLoaderRemoved] = useState(false)
   const lastWheelMove = useRef(0)
   const active = dialItems[selected]
   const move = useCallback(
@@ -45,18 +50,29 @@ export default function App() {
       ?.focus({ preventScroll: true })
   }, [selected])
 
+  useEffect(() => {
+    if (!sceneSettled) return
+    setLoadingProgress(1)
+    setSiteReady(true)
+    const timer = window.setTimeout(() => setLoaderRemoved(true), 700)
+    return () => window.clearTimeout(timer)
+  }, [sceneSettled])
+
+  const settleScene = useCallback(() => setSceneSettled(true), [])
+
   return (
     <SoundCloudPlayerProvider>
       <main
-        className={`experience${selected === 0 ? ' is-home' : ' has-card'}`}
+        className={`experience${selected === 0 ? ' is-home' : ' has-card'}${siteReady ? ' is-revealed' : ' is-loading'}`}
         aria-label="25ohms portfolio"
+        aria-hidden={!siteReady}
       >
         <a className="skip-link" href="#dial">
           Skip to menu
         </a>
         <div className="scene-layer">
           <Suspense fallback={null}>
-            <HeroScene cardOpen={selected > 0} />
+            <HeroScene cardOpen={selected > 0} onSettled={settleScene} />
           </Suspense>
         </div>
         <aside className="dial-rail">
@@ -132,6 +148,7 @@ export default function App() {
         )}
         <div className="crt-overlay" aria-hidden="true" />
       </main>
+      {!loaderRemoved && <LoadingScreen progress={loadingProgress} leaving={siteReady} />}
     </SoundCloudPlayerProvider>
   )
 }

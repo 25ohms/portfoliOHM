@@ -67,7 +67,13 @@ class SceneErrorBoundary extends Component<
   }
 }
 
-export default function HeroScene({ cardOpen = false }: { cardOpen?: boolean }) {
+export default function HeroScene({
+  cardOpen = false,
+  onSettled,
+}: {
+  cardOpen?: boolean
+  onSettled: () => void
+}) {
   const [config, setConfig] = useState(initialConfig)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -81,8 +87,14 @@ export default function HeroScene({ cardOpen = false }: { cardOpen?: boolean }) 
   const dragging = useRef(false)
   const pointer = useRef<{ id: number; x: number; y: number } | null>(null)
   const runtime = useMemo(() => ({ pose, invalidate, dragging }), [])
-  const handleReady = useCallback(() => setReady(true), [])
-  const handleError = useCallback(() => setFailed(true), [])
+  const handleReady = useCallback(() => {
+    setReady(true)
+    onSettled()
+  }, [onSettled])
+  const handleError = useCallback(() => {
+    setFailed(true)
+    onSettled()
+  }, [onSettled])
   const handleSlow = useCallback(() => setQuality(0.65), [])
 
   useEffect(() => {
@@ -170,16 +182,6 @@ export default function HeroScene({ cardOpen = false }: { cardOpen?: boolean }) 
         onPointerCancel={finishDrag}
         onLostPointerCapture={finishDrag}
       >
-        {(!ready || failed) && (
-          <picture>
-            <source media="(max-width: 700px)" srcSet="/ohmega-still-mobile.png" />
-            <img
-              className="scene-fallback"
-              src="/ohmega-still.png"
-              alt="A cyan wireframe fetus floating in a dark star field"
-            />
-          </picture>
-        )}
         {!failed && (
           <SceneErrorBoundary onError={handleError}>
             <Canvas

@@ -67,6 +67,55 @@ button {
   overflow: hidden;
   isolation: isolate;
   background: radial-gradient(ellipse at 66% 49%, #09201f 0, #03090c 48%, #020405 100%);
+  transition: opacity 0.7s ease;
+}
+.experience.is-loading {
+  opacity: 0;
+  pointer-events: none;
+}
+.experience.is-revealed {
+  opacity: 1;
+}
+.boot-screen {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #030608;
+  opacity: 1;
+  transition: opacity 0.7s ease;
+}
+.boot-screen.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot-omega {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 180px;
+  height: 190px;
+  color: transparent;
+  font: 400 160px/1 var(--font-display);
+  -webkit-text-stroke: 1px var(--accent);
+  filter: drop-shadow(0 0 8px #8effdc38);
+}
+.boot-omega-outline,
+.boot-omega-fill {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.boot-omega-fill {
+  overflow: hidden;
+  color: var(--accent);
+  -webkit-text-stroke: 0;
+  text-shadow: 0 0 16px #8effdc8a;
+  clip-path: inset(var(--load-top) 0 0 0);
+  transition: clip-path 0.12s linear;
 }
 .scene-layer {
   position: absolute;
