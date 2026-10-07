@@ -96,13 +96,6 @@ export default function Waveform({
       }}
       onPointerUp={() => { dragging.current = false }}
       onPointerCancel={() => { dragging.current = false }}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-          event.preventDefault()
-          event.stopPropagation()
-          onSeek(Math.max(0, Math.min(1, progress + (event.key === 'ArrowRight' ? 0.02 : -0.02))))
-        }
-      }}
     >
       <canvas className="waveform-canvas" ref={canvas} aria-hidden="true" />
     </div>

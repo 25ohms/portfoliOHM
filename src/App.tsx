@@ -8,7 +8,7 @@ import { socialLinks } from './data/artist'
 const HeroScene = lazy(() => import('./scene/HeroScene'))
 
 const dialItems = [
-  { label: 'Ω' },
+  { label: 'Ω', logo: true },
   { label: 'Audio' },
   { label: 'Visual', href: 'https://www.youtube.com/@twentyfiveohms' },
   { label: 'Shows', href: 'https://ra.co/dj/25ohms' },
@@ -26,6 +26,7 @@ export default function App() {
 
 function PortfolioExperience() {
   const player = useSoundCloudPlayer()
+  const { togglePlayback, skipTrack, seekTo, position, duration } = player
   const [selected, setSelected] = useState(0)
   const [sceneSettled, setSceneSettled] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -41,18 +42,29 @@ function PortfolioExperience() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')
-      )
-        return
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) return
+      if (target.closest('input:not([type="range"]), textarea, select, [contenteditable="true"]')) return
+      if (event.key === ' ' || event.code === 'Space') {
+        if (event.repeat) return
+        event.preventDefault()
+        togglePlayback()
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (event.altKey || event.ctrlKey || event.metaKey) return
+        event.preventDefault()
+        if (event.shiftKey) skipTrack(event.key === 'ArrowRight' ? 1 : -1)
+        else {
+          const offset = event.key === 'ArrowRight' ? 10_000 : -10_000
+          seekTo(Math.max(0, Math.min(duration, position + offset)))
+        }
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         move(event.key === 'ArrowDown' ? 1 : -1)
       } else if (event.key === 'Escape') setSelected(0)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [move])
+  }, [duration, move, position, seekTo, skipTrack, togglePlayback])
 
   useEffect(() => {
     const focusedItem = document.activeElement
@@ -161,7 +173,7 @@ function PortfolioExperience() {
                     aria-pressed={index === selected}
                     onClick={() => setSelected(index)}
                   >
-                    {item.label}
+                    {item.logo ? <span className="dial-logo" aria-hidden="true" /> : item.label}
                   </button>
                 )
               })}

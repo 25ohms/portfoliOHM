@@ -74,13 +74,14 @@ docs/                      Local, ignored design notes (not included in Git)
 
 The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The SoundCloud now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable waveform.
 
+Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu.
+
 ## Triage before removal
 
 - `src/data/artist.ts` exports `navigation`, `biography`, and `portfolioSections` that are not currently imported. Review whether to keep this future content or remove the unused exports; `socialLinks` is active.
 - `reference/artist_info/` and `reference/TDReference/` are not loaded by the site. Confirm whether these source notes and the TouchDesigner project should remain archived before removing them.
 - `@fontsource-variable/dm-sans` is in `package.json` but has no source imports. Confirm whether it is planned before removing the dependency.
-- `.nvmrc` specifies Node 24 but is ignored by `.gitignore`, so a fresh checkout does not receive the version pin. Decide whether to track it or keep the Node requirement documented here.
-- `docs/website-styling.md` is ignored and local-only; decide whether it remains useful as an archive or should be removed. `docs/.website-styling.md.swp` is an editor swap file and appears to be temporary output.
+- `docs/website-styling.md` is ignored and local-only; decide whether it remains useful as an archive or should be removed.
 
 ## Common commands
 

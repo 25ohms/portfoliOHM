@@ -20,12 +20,8 @@ export default function LoadingScreen({
         aria-valuenow={percent}
         style={{ '--load-top': `${100 - percent}%` } as CSSProperties}
       >
-        <span className="boot-omega-outline" aria-hidden="true">
-          Ω
-        </span>
-        <span className="boot-omega-fill" aria-hidden="true">
-          Ω
-        </span>
+        <span className="boot-omega-outline" aria-hidden="true" />
+        <span className="boot-omega-fill" aria-hidden="true" />
       </div>
     </div>
   )
