@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type PointerEvent } from 'react'
+import { useCallback, useEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react'
 
 export default function Waveform({
   peaks,
@@ -16,8 +16,14 @@ export default function Waveform({
 
   const seekFromPointer = useCallback((event: PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
-    onSeek(Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)))
+    if (bounds.width) onSeek(Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)))
   }, [onSeek])
+
+  const seekFromKey = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    onSeek(Math.max(0, Math.min(1, progress + (event.key === 'ArrowRight' ? 0.02 : -0.02))))
+  }, [onSeek, progress])
 
   useEffect(() => {
     const element = canvas.current
@@ -34,15 +40,12 @@ export default function Waveform({
       context.clearRect(0, 0, width, height)
 
       if (!peaks?.length) {
+        if (!ready) return
         context.fillStyle = getComputedStyle(element).getPropertyValue('--muted')
         context.font = '9px "Space Mono", monospace'
         context.textAlign = 'center'
         context.textBaseline = 'middle'
-        context.fillText(
-          ready ? 'TRACK WAVEFORM UNAVAILABLE' : 'PREPARING TRACK WAVEFORM',
-          width / 2,
-          height / 2,
-        )
+        context.fillText('TRACK WAVEFORM UNAVAILABLE', width / 2, height / 2)
         return
       }
 
@@ -54,10 +57,7 @@ export default function Waveform({
       for (let index = 0; index < barCount; index++) {
         const start = Math.floor((index / barCount) * peaks.length)
         const end = Math.max(start + 1, Math.floor(((index + 1) / barCount) * peaks.length))
-        const amplitude = Math.max(
-          0,
-          Math.min(1, Math.max(...peaks.slice(start, end))),
-        )
+        const amplitude = Math.max(0, Math.min(1, Math.max(...peaks.slice(start, end))))
         const barHeight = Math.max(1, amplitude * height * 0.9)
         context.globalAlpha = index / barCount <= played ? 1 : 0.38
         context.fillStyle = accent
@@ -75,7 +75,7 @@ export default function Waveform({
       observer.disconnect()
       paletteObserver.disconnect()
     }
-  }, [peaks, progress])
+  }, [peaks, progress, ready])
 
   return (
     <div
@@ -86,6 +86,7 @@ export default function Waveform({
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
       tabIndex={0}
+      onKeyDown={seekFromKey}
       onPointerDown={(event) => {
         dragging.current = true
         event.currentTarget.setPointerCapture(event.pointerId)

@@ -3,9 +3,13 @@ import DitheredLogo from './DitheredLogo'
 export default function LoadingScreen({
   progress,
   leaving,
+  error,
+  onRetry,
 }: {
   progress: number
   leaving: boolean
+  error?: string | null
+  onRetry?: () => void
 }) {
   const percent = Math.round(progress * 100)
 
@@ -21,6 +25,13 @@ export default function LoadingScreen({
       >
         <DitheredLogo progress={progress} />
       </div>
+      {error && (
+        <div className="boot-error" role="alert">
+          <span>CATALOGUE LOAD FAILED</span>
+          <p>{error}</p>
+          {onRetry && <button onClick={onRetry}>RETRY</button>}
+        </div>
+      )}
     </div>
   )
 }

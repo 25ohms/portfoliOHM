@@ -11,6 +11,7 @@ const palette = paletteBytes(DEFAULT_SCENE.palette)
 
 export default function DitheredLogo({ progress }: { progress: number }) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const displayedProgress = useRef(0)
   const [logo, setLogo] = useState<HTMLImageElement | null>(null)
 
   useEffect(() => {
@@ -38,44 +39,71 @@ export default function DitheredLogo({ progress }: { progress: number }) {
     const sourcePixels = sourceContext.getImageData(0, 0, renderSize, renderSize).data
     const output = context.createImageData(renderSize, renderSize)
 
-    for (let y = 0; y < renderSize; y += pixelSize) {
-      for (let x = 0; x < renderSize; x += pixelSize) {
-        let alpha = 0
-        let samples = 0
-        for (let offsetY = 0; offsetY < pixelSize; offsetY++) {
-          for (let offsetX = 0; offsetX < pixelSize; offsetX++) {
-            const sourceIndex = ((y + offsetY) * renderSize + x + offsetX) * 4
-            alpha += sourcePixels[sourceIndex + 3]
-            samples++
+    const draw = (amount: number) => {
+      output.data.fill(0)
+      for (let y = 0; y < renderSize; y += pixelSize) {
+        for (let x = 0; x < renderSize; x += pixelSize) {
+          let alpha = 0
+          let samples = 0
+          for (let offsetY = 0; offsetY < pixelSize; offsetY++) {
+            for (let offsetX = 0; offsetX < pixelSize; offsetX++) {
+              const sourceIndex = ((y + offsetY) * renderSize + x + offsetX) * 4
+              alpha += sourcePixels[sourceIndex + 3]
+              samples++
+            }
           }
-        }
 
-        const fill = (y + pixelSize / 2) / renderSize >= 1 - progress ? 1 : 0.38
-        const intensity = (alpha / samples / 255) * fill
-        const threshold =
-          0.5 * (1 - strength) + bayerValue(x / pixelSize, y / pixelSize, matrix) * strength
-        const quantized = Math.max(
-          0,
-          Math.min(levels - 1, Math.floor(intensity * (levels - 1) + threshold)),
-        )
-        if (quantized === 0) continue
+          const row = (y + pixelSize / 2) / renderSize
+          const ramp = amount >= 1 ? 1 : Math.max(0, Math.min(1, (row - (1 - amount)) / 0.08))
+          const smoothRamp = ramp * ramp * (3 - 2 * ramp)
+          const fill = 0.38 + smoothRamp * 0.62
+          const intensity = (alpha / samples / 255) * fill
+          const threshold =
+            0.5 * (1 - strength) + bayerValue(x / pixelSize, y / pixelSize, matrix) * strength
+          const quantized = Math.max(
+            0,
+            Math.min(levels - 1, Math.floor(intensity * (levels - 1) + threshold)),
+          )
+          if (quantized === 0) continue
 
-        const paletteIndex = Math.round((quantized / (levels - 1)) * 255) * 4
-        for (let offsetY = 0; offsetY < pixelSize; offsetY++) {
-          for (let offsetX = 0; offsetX < pixelSize; offsetX++) {
-            const outputIndex = ((y + offsetY) * renderSize + x + offsetX) * 4
-            output.data[outputIndex] = palette[paletteIndex]
-            output.data[outputIndex + 1] = palette[paletteIndex + 1]
-            output.data[outputIndex + 2] = palette[paletteIndex + 2]
-            output.data[outputIndex + 3] = 255
+          const paletteIndex = Math.round((quantized / (levels - 1)) * 255) * 4
+          for (let offsetY = 0; offsetY < pixelSize; offsetY++) {
+            for (let offsetX = 0; offsetX < pixelSize; offsetX++) {
+              const outputIndex = ((y + offsetY) * renderSize + x + offsetX) * 4
+              output.data[outputIndex] = palette[paletteIndex]
+              output.data[outputIndex + 1] = palette[paletteIndex + 1]
+              output.data[outputIndex + 2] = palette[paletteIndex + 2]
+              output.data[outputIndex + 3] = 255
+            }
           }
         }
       }
+      context.putImageData(output, 0, 0)
     }
 
     element.width = renderSize
     element.height = renderSize
-    context.putImageData(output, 0, 0)
+    const from = displayedProgress.current
+    const to = Math.max(0, Math.min(1, progress))
+    if (Math.abs(to - from) < 0.001) {
+      displayedProgress.current = to
+      draw(to)
+      return
+    }
+    const startTime = performance.now()
+    const duration = 420
+    let frame = 0
+    const animate = (now: number) => {
+      const fraction = Math.min(1, (now - startTime) / duration)
+      const eased = fraction * fraction * (3 - 2 * fraction)
+      const amount = from + (to - from) * eased
+      displayedProgress.current = amount
+      draw(amount)
+      if (fraction < 1) frame = requestAnimationFrame(animate)
+      else displayedProgress.current = to
+    }
+    frame = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(frame)
   }, [logo, progress])
 
   return (

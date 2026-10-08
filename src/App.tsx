@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import AudioCard from './cards/AudioCard'
-import { SoundCloudPlayerProvider, useSoundCloudPlayer } from './audio/SoundCloudPlayer'
+import { MusicPlayerProvider, useMusicPlayer } from './audio/MusicPlayer'
 import NowPlayingBar from './audio/NowPlayingBar'
 import LoadingScreen from './components/LoadingScreen'
 import { socialLinks } from './data/artist'
@@ -18,14 +18,14 @@ const scrollableCardSelector = '.content-card, .audio-card-body'
 
 export default function App() {
   return (
-    <SoundCloudPlayerProvider>
+    <MusicPlayerProvider>
       <PortfolioExperience />
-    </SoundCloudPlayerProvider>
+    </MusicPlayerProvider>
   )
 }
 
 function PortfolioExperience() {
-  const player = useSoundCloudPlayer()
+  const player = useMusicPlayer()
   const { togglePlayback, skipTrack, seekTo, position, duration } = player
   const [selected, setSelected] = useState(0)
   const [sceneSettled, setSceneSettled] = useState(false)
@@ -75,12 +75,18 @@ function PortfolioExperience() {
   }, [selected])
 
   useEffect(() => {
-    if (!sceneSettled) return
+    if (siteReady) return
+    const sceneProgress = sceneSettled ? 0.15 : 0
+    setLoadingProgress(Math.min(0.99, sceneProgress + player.waveformProgress * 0.85))
+  }, [player.waveformProgress, sceneSettled, siteReady])
+
+  useEffect(() => {
+    if (!sceneSettled || player.catalogueStatus !== 'ready') return
     setLoadingProgress(1)
     setSiteReady(true)
     const timer = window.setTimeout(() => setLoaderRemoved(true), 700)
     return () => window.clearTimeout(timer)
-  }, [sceneSettled])
+  }, [player.catalogueStatus, sceneSettled])
 
   const settleScene = useCallback(() => setSceneSettled(true), [])
 
@@ -208,7 +214,14 @@ function PortfolioExperience() {
         <NowPlayingBar hidden={selected === 1 || !siteReady || !player.currentTrack} />
         <div className="crt-overlay" aria-hidden="true" />
       </main>
-      {!loaderRemoved && <LoadingScreen progress={loadingProgress} leaving={siteReady} />}
+      {!loaderRemoved && (
+        <LoadingScreen
+          progress={loadingProgress}
+          leaving={siteReady}
+          error={player.catalogueStatus === 'error' ? player.catalogueError : null}
+          onRetry={player.retryCatalogue}
+        />
+      )}
     </>
   )
 }

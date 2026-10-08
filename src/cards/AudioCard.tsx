@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { useSoundCloudPlayer } from '../audio/SoundCloudPlayer'
+import { useMusicPlayer } from '../audio/MusicPlayer'
 import Waveform from './Waveform'
-
-const soundCloudUrl = 'https://soundcloud.com/25ohms'
 
 function formatTime(milliseconds: number) {
   return `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, '0')}`
-}
-
-function fullArtwork(url?: string) {
-  return url?.replace(/-(?:large|t500x500)(?=\.)/, '-original')
 }
 
 function titleCase(title: string) {
@@ -126,7 +120,7 @@ async function artworkAccentColor(url: string, signal: AbortSignal): Promise<Col
 }
 
 export default function AudioCard() {
-  const player = useSoundCloudPlayer()
+  const player = useMusicPlayer()
   const { setArtworkAccent } = player
   const scrollArea = useRef<HTMLDivElement>(null)
   const headingElement = useRef<HTMLElement>(null)
@@ -135,7 +129,7 @@ export default function AudioCard() {
   const artworkExpandedRef = useRef(true)
   const collapseDistance = useRef(1)
   const [artworkExpanded, setArtworkExpanded] = useState(true)
-  const artworkUrl = fullArtwork(player.currentTrack?.artwork_url)
+  const artworkUrl = player.currentTrack?.artworkUrl
   const displayedPosition = player.duration ? Math.min(player.position, player.duration) : 0
 
   useEffect(() => {
@@ -189,6 +183,10 @@ export default function AudioCard() {
   }, [setArtworkAccent])
 
   useEffect(() => {
+    if (player.currentTrack) player.requestWaveform(player.currentTrack)
+  }, [player.currentTrack, player.requestWaveform])
+
+  useEffect(() => {
     if (!artworkUrl) {
       setArtworkAccent(null)
       return
@@ -208,6 +206,19 @@ export default function AudioCard() {
 
   return (
     <section className="content-card audio-card" aria-label="Audio player">
+      <nav className="catalogue-tabs" aria-label="Project catalogue">
+        {player.projects.map((project) => (
+          <button
+            key={project.id}
+            type="button"
+            className={`catalogue-tab${project.id === player.selectedProjectId ? ' is-selected' : ''}`}
+            aria-pressed={project.id === player.selectedProjectId}
+            onClick={() => player.selectProject(project.id)}
+          >
+            {project.title}
+          </button>
+        ))}
+      </nav>
       <header ref={headingElement} className="card-heading">
         <div>
           <h2 ref={headingTitleElement}>Audio</h2>
@@ -233,21 +244,23 @@ export default function AudioCard() {
         )}
       </header>
       <div ref={scrollArea} className="audio-card-body">
+        {player.catalogueError && player.tracks.length > 0 && (
+          <p className="catalogue-warning" role="status">
+            {player.catalogueError}{' '}
+            <button className="catalogue-retry" onClick={player.retryCatalogue}>RETRY</button>
+          </p>
+        )}
         {artworkUrl && <div className="track-artwork" aria-hidden="true" />}
         <div className="now-playing">
           <span className="eyebrow">NOW PLAYING</span>
           <strong className={`now-playing-title is-${titleCase(player.currentTrack?.title || '')}`}>
             {player.currentTrack?.title || 'Select a track'}
           </strong>
-          <span>25OHMS / SOUNDCLOUD</span>
+          <span>25OHMS / AUDIO</span>
         </div>
         <div className="waveform">
           <Waveform
-            peaks={
-              player.currentTrack?.waveform_url
-                ? player.waveforms[player.currentTrack.waveform_url]
-                : undefined
-            }
+            peaks={player.currentTrack ? player.waveforms[player.currentTrack.id] : undefined}
             progress={player.duration ? displayedPosition / player.duration : 0}
             ready={player.waveformsReady}
             onSeek={(progress) => {
@@ -255,6 +268,9 @@ export default function AudioCard() {
             }}
           />
         </div>
+        {player.waveformError && (
+          <p className="waveform-error" role="status">{player.waveformError}</p>
+        )}
         <div className="timeline">
           <span>{formatTime(displayedPosition)}</span>
           <input
@@ -289,17 +305,17 @@ export default function AudioCard() {
         </div>
         <div className="track-list">
           <div className="track-list-head">
-            <span>TRACK INDEX</span>
+            <span>PROJECT TRACKS</span>
             <span>
               {player.tracks.length
                 ? `${String(player.trackIndex + 1).padStart(2, '0')} / ${String(player.tracks.length).padStart(2, '0')}`
-                : 'LOADING'}
+                : player.catalogueStatus === 'loading' ? 'LOADING' : '—'}
             </span>
           </div>
           {player.tracks.length ? (
             player.tracks.map((track, index) => (
               <button
-                key={`${index}-${track}`}
+                key={track.id}
                 className={`track-row${index === player.trackIndex ? ' is-current' : ''}`}
                 onClick={() => player.changeTrack(index)}
               >
@@ -309,12 +325,18 @@ export default function AudioCard() {
               </button>
             ))
           ) : (
-            <p className="track-loading">Fetching all tracks from the archive…</p>
+            <div className="track-loading">
+              {player.catalogueStatus === 'loading' && <p>READING PROJECT INDEX…</p>}
+              {player.catalogueError && (
+                <>
+                  <p>{player.catalogueError}</p>
+                  <button className="catalogue-retry" onClick={player.retryCatalogue}>RETRY</button>
+                </>
+              )}
+            </div>
           )}
         </div>
-        <a className="card-link" href={soundCloudUrl} target="_blank" rel="noreferrer">
-          OPEN SOUNDCLOUD ↗
-        </a>
+        {player.playbackError && <p className="track-loading" role="status">{player.playbackError}</p>}
       </div>
     </section>
   )
