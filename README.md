@@ -72,7 +72,7 @@ docs/                      Local, ignored design notes (not included in Git)
 
 `dist/`, `node_modules/`, and browser/test outputs are generated or installed locally and can be recreated. `npm run clean` removes generated output.
 
-The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order and track names come from the bucket's `music/indexing.txt` and project `tracklist.txt` files. Waveform peaks are calculated in browser memory and are not persisted locally.
+The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order and track names come from the bucket's `music/indexing.txt` and project `tracklist.txt` files. On startup, each listed WAV is fetched to calculate waveform peaks in memory before the page is revealed; peaks are not persisted locally.
 
 Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu.
 

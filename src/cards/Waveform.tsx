@@ -40,15 +40,12 @@ export default function Waveform({
       context.clearRect(0, 0, width, height)
 
       if (!peaks?.length) {
+        if (!ready) return
         context.fillStyle = getComputedStyle(element).getPropertyValue('--muted')
         context.font = '9px "Space Mono", monospace'
         context.textAlign = 'center'
         context.textBaseline = 'middle'
-        context.fillText(
-          ready ? 'TRACK WAVEFORM UNAVAILABLE' : 'PREPARING TRACK WAVEFORM',
-          width / 2,
-          height / 2,
-        )
+        context.fillText('TRACK WAVEFORM UNAVAILABLE', width / 2, height / 2)
         return
       }
 

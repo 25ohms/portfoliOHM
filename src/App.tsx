@@ -75,12 +75,18 @@ function PortfolioExperience() {
   }, [selected])
 
   useEffect(() => {
-    if (!sceneSettled) return
+    if (siteReady) return
+    const sceneProgress = sceneSettled ? 0.15 : 0
+    setLoadingProgress(Math.min(0.99, sceneProgress + player.waveformProgress * 0.85))
+  }, [player.waveformProgress, sceneSettled, siteReady])
+
+  useEffect(() => {
+    if (!sceneSettled || player.catalogueStatus !== 'ready') return
     setLoadingProgress(1)
     setSiteReady(true)
     const timer = window.setTimeout(() => setLoaderRemoved(true), 700)
     return () => window.clearTimeout(timer)
-  }, [sceneSettled])
+  }, [player.catalogueStatus, sceneSettled])
 
   const settleScene = useCallback(() => setSceneSettled(true), [])
 
@@ -208,7 +214,14 @@ function PortfolioExperience() {
         <NowPlayingBar hidden={selected === 1 || !siteReady || !player.currentTrack} />
         <div className="crt-overlay" aria-hidden="true" />
       </main>
-      {!loaderRemoved && <LoadingScreen progress={loadingProgress} leaving={siteReady} />}
+      {!loaderRemoved && (
+        <LoadingScreen
+          progress={loadingProgress}
+          leaving={siteReady}
+          error={player.catalogueStatus === 'error' ? player.catalogueError : null}
+          onRetry={player.retryCatalogue}
+        />
+      )}
     </>
   )
 }
