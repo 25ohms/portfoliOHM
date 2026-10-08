@@ -5,7 +5,7 @@ test-results/
 playwright-report/
 playwright/.cache/
 .vite/
-docs/
+docs/*
 coverage/
 .cache/
 .DS_Store

@@ -4,7 +4,7 @@ A single-screen artist portfolio with an interactive radial menu and a live, pal
 
 ## Install and run
 
-Requirements: Node.js 24 and npm. No environment variables or credentials are needed.
+Requirements: Node.js 24 and npm. Set `BUCKET_URL` in your local `.env` to the public R2 bucket base URL.
 
 ```sh
 npm ci
@@ -14,6 +14,8 @@ npm run dev
 Open the local URL printed by Vite. `npm run build` creates the static site in `dist/`; `npm run preview` serves that build. `package-lock.json` keeps installs reproducible.
 
 The app uses React and Three.js with React Three Fiber; Leva supplies development scene controls, and Space Mono is bundled locally. Vite, TypeScript, and ESLint support development and builds; Vitest, Playwright, and Prettier provide tests and formatting. Playwright browsers are installed separately with `npx playwright install chromium firefox webkit` when running browser tests.
+
+The music catalogue and audio files are served from a public Cloudflare R2 bucket. Local development needs internet access to that bucket, and the bucket must allow browser CORS requests for audio loading and waveform generation. `.env` is ignored by Git. Vite injects `BUCKET_URL` into the client bundle for browser requests, so this keeps the URL out of the repository but does not hide it from site visitors. Do not put credentials or private keys in this variable. If the bucket must be private, serve the audio through a backend or signed URLs instead of exposing a direct bucket URL.
 
 ## Project structure
 
@@ -67,12 +69,11 @@ tests/portfolio.spec.ts    Browser-level portfolio checks
 reference/
   artist_info/             Artist source notes
   TDReference/             TouchDesigner reference project
-docs/                      Local, ignored design notes (not included in Git)
 ```
 
 `dist/`, `node_modules/`, and browser/test outputs are generated or installed locally and can be recreated. `npm run clean` removes generated output.
 
-The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order and track names come from the bucket's `music/indexing.txt` and project `tracklist.txt` files. On startup, each listed WAV is fetched to calculate waveform peaks in memory before the page is revealed; peaks are not persisted locally.
+The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order comes from `music/indexing.txt`; each project's `tracklist.txt` lists its WAV files. Waveform peaks are calculated in memory and not persisted locally.
 
 Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu.
 
@@ -81,7 +82,6 @@ Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 second
 - `src/data/artist.ts` exports `navigation`, `biography`, and `portfolioSections` that are not currently imported. Review whether to keep this future content or remove the unused exports; `socialLinks` is active.
 - `reference/artist_info/` and `reference/TDReference/` are not loaded by the site. Confirm whether these source notes and the TouchDesigner project should remain archived before removing them.
 - `@fontsource-variable/dm-sans` is in `package.json` but has no source imports. Confirm whether it is planned before removing the dependency.
-- `docs/website-styling.md` is ignored and local-only; decide whether it remains useful as an archive or should be removed.
 
 ## Common commands
 
@@ -90,6 +90,7 @@ npm run lint
 npm test
 npm run build
 npm run test:e2e
+npm audit
 ```
 
 For scene tuning and preview capture, start `npm run dev`, then use `npm run capture` to refresh the fallback still images. Deploy the contents of `dist/` to a static host.

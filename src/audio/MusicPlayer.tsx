@@ -9,10 +9,31 @@ import {
   type ReactNode,
 } from 'react'
 
-const bucketUrl = 'https://pub-16aec37c4acb4d7aafcea0bd47e0382b.r2.dev'
-const artworkPaths: Record<string, string> = {
+const bucketUrl = import.meta.env.BUCKET_URL?.replace(/\/$/, '')
+const projectArtworkPaths: Record<string, string> = {
   generationOHMEGA: 'albums/generationOHMEGA/4k_gen0_6_compressed.jpg',
   FIVEBYFIVE: 'eps/FIVEBYFIVE/2025_05_19_FiveByFive_3_4000x4000.png',
+  'ohmSTEP:vol1': 'eps/ohmSTEP:vol1/ohmSTEP-vol1-cover-art.png',
+}
+const trackAssetPaths: Record<string, Record<string, { audio: string; artwork: string }>> = {
+  'ohmSTEP:vol2': {
+    misstheRAGE: {
+      audio: 'eps/ohmSTEP:vol2/misstheRAGE/misstheRAGE.wav',
+      artwork: 'eps/ohmSTEP:vol2/misstheRAGE/misstheRAGE_6.png',
+    },
+    queenST: {
+      audio: 'eps/ohmSTEP:vol2/queenST/queenST.wav',
+      artwork: 'eps/ohmSTEP:vol2/queenST/queenST.png',
+    },
+    imissyou: {
+      audio: 'eps/ohmSTEP:vol2/imissyou/imissyou.wav',
+      artwork: 'eps/ohmSTEP:vol2/imissyou/imissyou.jpg',
+    },
+    hAA: {
+      audio: 'eps/ohmSTEP:vol2/hAA/hAA.wav',
+      artwork: 'eps/ohmSTEP:vol2/hAA/hAA-2.png',
+    },
+  },
 }
 
 export type MusicTrack = {
@@ -60,6 +81,7 @@ type PlayerState = {
 const PlayerContext = createContext<PlayerState | null>(null)
 
 function publicUrl(path: string) {
+  if (!bucketUrl) throw new Error('BUCKET_URL is not set.')
   return `${bucketUrl}/${path.split('/').map(encodeURIComponent).join('/')}`
 }
 
@@ -67,7 +89,7 @@ function parseIndex(source: string) {
   const rows = source.split(/\r?\n/).map((line) => line.trim())
   const projects: Array<{ id: string; title: string; prefix: string }> = []
   for (let index = 0; index < rows.length; index++) {
-    const title = rows[index].match(/^([^:#]+):$/)?.[1]?.trim()
+    const title = rows[index].match(/^(.+):$/)?.[1]?.trim()
     if (!title) continue
     const path = rows.slice(index + 1).find((line) => line && !line.startsWith('#'))
     if (!path || !path.endsWith('/*')) continue
@@ -79,11 +101,6 @@ function parseIndex(source: string) {
     index = rows.indexOf(path, index + 1)
   }
   return projects
-}
-
-function trackUrl(projectPrefix: string, title: string) {
-  const fileName = title.replace(/\.wav$/i, '')
-  return publicUrl(`music/${projectPrefix}/${fileName}.wav`)
 }
 
 async function calculateWaveformPeaks(url: string, signal: AbortSignal) {
@@ -116,6 +133,7 @@ async function calculateWaveformPeaks(url: string, signal: AbortSignal) {
 }
 
 async function fetchCatalogue(signal: AbortSignal) {
+  if (!bucketUrl) throw new Error('BUCKET_URL is not set.')
   const response = await fetch(`${bucketUrl}/music/indexing.txt`, { cache: 'no-store', signal })
   if (!response.ok) throw new Error(`Project index request failed (${response.status})`)
   const indexText = await response.text()
@@ -125,8 +143,8 @@ async function fetchCatalogue(signal: AbortSignal) {
   const results = await Promise.all(
     entries.map(async (entry) => {
       const base = `music/${entry.prefix}`
-      const artworkUrl = artworkPaths[entry.title]
-        ? publicUrl(`music/${artworkPaths[entry.title]}`)
+      const artworkUrl = projectArtworkPaths[entry.title]
+        ? publicUrl(`music/${projectArtworkPaths[entry.title]}`)
         : ''
       try {
         const response = await fetch(publicUrl(`${base}/tracklist.txt`), {
@@ -142,12 +160,18 @@ async function fetchCatalogue(signal: AbortSignal) {
           ...entry,
           objectPrefix: entry.prefix,
           artworkUrl,
-          tracks: tracklist.map((title, index) => ({
-            id: `${entry.id}-${index + 1}`,
-            title: title.replace(/\.wav$/i, ''),
-            audioUrl: trackUrl(entry.prefix, title),
-            artworkUrl,
-          })),
+          tracks: tracklist.map((title, index) => {
+            const trackTitle = title.replace(/\.wav$/i, '')
+            const trackAssets = trackAssetPaths[entry.title]?.[trackTitle]
+            return {
+              id: `${entry.id}-${index + 1}`,
+              title: trackTitle,
+              audioUrl: publicUrl(`music/${trackAssets?.audio ?? `${entry.prefix}/${trackTitle}.wav`}`),
+              artworkUrl: trackAssets?.artwork
+                ? publicUrl(`music/${trackAssets.artwork}`)
+                : artworkUrl,
+            }
+          }),
         }
         return { project, error: null }
       } catch (error) {
@@ -195,6 +219,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     [projects, selectedProjectId],
   )
   const trackIndex = Math.max(0, tracks.findIndex((track) => track.id === currentTrack?.id))
+  const tracksRef = useRef(tracks)
+  const trackIndexRef = useRef(trackIndex)
+  tracksRef.current = tracks
+  trackIndexRef.current = trackIndex
 
   const loadCatalogue = useCallback(() => {
     catalogueController.current?.abort()
@@ -274,6 +302,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       return
     }
     element.pause()
+    playingRef.current = false
+    setPlaying(false)
     setPlaybackError(null)
     setPosition(0)
     setDuration(0)
@@ -300,11 +330,13 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       setPlaybackError(null)
     }
     const onPause = () => {
+      if (!element.paused) return
       playingRef.current = false
       setPlaying(false)
     }
     const onEnded = () => {
-      const next = tracks[(trackIndex + 1) % tracks.length]
+      const currentTracks = tracksRef.current
+      const next = currentTracks[(trackIndexRef.current + 1) % currentTracks.length]
       if (next) {
         autoplayOnSourceChange.current = true
         setCurrentTrack(next)
@@ -329,7 +361,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       element.removeEventListener('ended', onEnded)
       element.removeEventListener('error', onError)
     }
-  }, [tracks, trackIndex])
+  }, [])
 
   const play = useCallback(async () => {
     const element = audio.current
@@ -340,14 +372,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       setPlaybackError('Playback could not start. Press play to try again.')
     }
   }, [currentTrack])
-
-  const playElement = useCallback(async (element: HTMLAudioElement) => {
-    try {
-      await element.play()
-    } catch {
-      setPlaybackError('Playback could not start. Press play to try again.')
-    }
-  }, [])
 
   const requestWaveform = useCallback((track: MusicTrack) => {
     waveformSelection.current = track.id
@@ -388,6 +412,11 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     const project = projects.find((entry) => entry.id === id)
     if (!project) return
     audio.current?.pause()
+    playingRef.current = false
+    setPlaying(false)
+    setPosition(0)
+    setDuration(0)
+    setPlaybackError(null)
     autoplayOnSourceChange.current = false
     setSelectedProjectId(id)
     setCurrentTrack(project.tracks[0] ?? null)
@@ -400,19 +429,11 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     requestWaveform(next)
     if (next.id === currentTrack?.id) void play()
     else {
-      const element = audio.current
-      if (element) {
-        element.pause()
-        element.src = next.audioUrl
-        element.load()
-        setPosition(0)
-        setDuration(0)
-        setPlaybackError(null)
-        void playElement(element)
-      }
+      audio.current?.pause()
+      autoplayOnSourceChange.current = true
       setCurrentTrack(next)
     }
-  }, [currentTrack, play, playElement, requestWaveform, tracks])
+  }, [currentTrack, play, requestWaveform, tracks])
 
   const skipTrack = useCallback((direction: -1 | 1) => {
     if (!tracks.length) return
