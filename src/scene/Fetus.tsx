@@ -1,15 +1,32 @@
-import { useEffect, useMemo } from 'react'
-import { useLoader } from '@react-three/fiber'
-import { AdditiveBlending, Box3, Group, Mesh, MeshBasicMaterial, Vector3 } from 'three'
+import { useEffect, useMemo, useRef } from 'react'
+import { useFrame, useLoader } from '@react-three/fiber'
+import {
+  AdditiveBlending,
+  Box3,
+  DynamicDrawUsage,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  Vector3,
+} from 'three'
 import { FetusLoader } from './FetusLoader'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
 import modelUrl from '../../models/fetus/source/scene.fbx?url'
 import type { SceneConfig } from '../config/scene'
+import { useMusicPlayer } from '../audio/MusicPlayer'
+import { readBassLevel, smoothBassLevel } from '../audio/bass'
 
 export default function Fetus({ config, onReady }: { config: SceneConfig; onReady: () => void }) {
   const original = useLoader(FetusLoader, modelUrl)
-  const { normalized, material } = useMemo(() => {
+  const { analyser, playing } = useMusicPlayer()
+  const bassLevel = useRef(0)
+  const audioData = useMemo(
+    () => (analyser ? new Uint8Array(analyser.frequencyBinCount) : null),
+    [analyser],
+  )
+  const { normalized, material, geometries } = useMemo(() => {
     const object = clone(original)
+    const geometries: Mesh['geometry'][] = []
     const material = new MeshBasicMaterial({
       color: 0xffffff,
       wireframe: true,
@@ -20,7 +37,12 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
       toneMapped: false,
     })
     object.traverse((child) => {
-      if (child instanceof Mesh) child.material = material
+      if (child instanceof Mesh) {
+        child.geometry = child.geometry.clone()
+        child.geometry.getAttribute('position').setUsage(DynamicDrawUsage)
+        geometries.push(child.geometry)
+        child.material = material
+      }
     })
     object.updateMatrixWorld(true)
     const box = new Box3().setFromObject(object)
@@ -30,8 +52,35 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     const normalized = new Group()
     normalized.add(object)
     normalized.scale.setScalar(scale)
-    return { normalized, material }
+    return { normalized, material, geometries }
   }, [original])
+  useFrame((state, delta) => {
+    const target = playing && analyser && audioData ? readBassLevel(analyser, audioData) : 0
+    bassLevel.current = smoothBassLevel(bassLevel.current, target, delta)
+    const strength = bassLevel.current
+    if (strength === 0) return
+    const time = state.clock.elapsedTime
+    for (const geometry of geometries) {
+      const position = geometry.getAttribute('position')
+      const base = geometry.userData.basePosition as Float32Array | undefined
+      if (!base) {
+        geometry.userData.basePosition = new Float32Array(position.array as ArrayLike<number>)
+      }
+      const originalPositions = geometry.userData.basePosition as Float32Array
+      const amount = (0.008 * strength) / normalized.scale.x
+      for (let index = 0; index < position.count; index++) {
+        const offset = index * 3
+        const x = originalPositions[offset]
+        const y = originalPositions[offset + 1]
+        const z = originalPositions[offset + 2]
+        const phase = x * 17.1 + y * 31.7 + z * 23.3
+        position.array[offset] = x + Math.sin(time * 37 + phase) * amount
+        position.array[offset + 1] = y + Math.sin(time * 43 + phase * 1.7) * amount
+        position.array[offset + 2] = z + Math.sin(time * 39 + phase * 2.3) * amount
+      }
+      position.needsUpdate = true
+    }
+  })
   useEffect(() => {
     material.color.setRGB(
       config.material.intensity,
@@ -43,7 +92,13 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
   useEffect(() => {
     onReady()
   }, [onReady])
-  // Cached FBX geometry is shared across route visits; only our material is owned here.
-  useEffect(() => () => material.dispose(), [material])
+  // Cached FBX geometry is shared across route visits; this clone owns its geometry and material.
+  useEffect(
+    () => () => {
+      material.dispose()
+      geometries.forEach((geometry) => geometry.dispose())
+    },
+    [material, geometries],
+  )
   return <primitive object={normalized} dispose={null} />
 }

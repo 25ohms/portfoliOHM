@@ -360,7 +360,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         const analyserNode = context.createAnalyser()
         const gain = context.createGain()
         analyserNode.fftSize = 2048
-        analyserNode.smoothingTimeConstant = 0.7
+        analyserNode.smoothingTimeConstant = 0.15
         source.connect(analyserNode)
         analyserNode.connect(gain)
         gain.connect(context.destination)

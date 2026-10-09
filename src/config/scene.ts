@@ -3,6 +3,7 @@ export type PaletteStop = { position: number; color: string }
 export interface SceneConfig {
   version: 1
   model: { rotation: Vec3; position: Vec3; scale: number }
+  logo: { rotation: Vec3; position: Vec3 }
   camera: { fov: number; padding: number }
   motion: { speed: number }
   material: { intensity: number; opacity: number }
@@ -21,6 +22,7 @@ export interface SceneConfig {
 export const DEFAULT_SCENE: SceneConfig = {
   version: 1,
   model: { rotation: [0.13962634015954636, 0, 0], position: [0, 0, 0], scale: 1 },
+  logo: { rotation: [0.4363323129985824, 0, 0], position: [0, 0.75, -0.2] },
   camera: { fov: 36, padding: 1.35 },
   motion: { speed: 0.075 },
   material: { intensity: 0.85, opacity: 0.3 },
@@ -39,7 +41,8 @@ export const PRESET_KEY = '25ohms.scene.v1'
 
 // Reject malformed presets rather than passing NaN or unbounded values to the GPU.
 export function parseSceneConfig(input: unknown): SceneConfig {
-  const c = input as SceneConfig
+  const raw = input as SceneConfig
+  const c = { ...raw, logo: raw?.logo ?? DEFAULT_SCENE.logo }
   const range = (v: unknown, min: number, max: number) =>
     typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
   const vec = (v: unknown, bound: number) =>
@@ -50,6 +53,8 @@ export function parseSceneConfig(input: unknown): SceneConfig {
     !vec(c.model?.rotation, 1000) ||
     !vec(c.model?.position, 5) ||
     !range(c.model?.scale, 0.1, 3) ||
+    !vec(c.logo?.rotation, 1000) ||
+    !vec(c.logo?.position, 5) ||
     !range(c.camera?.fov, 15, 75) ||
     !range(c.camera?.padding, 1, 3) ||
     !range(c.motion?.speed, 0, 0.5) ||

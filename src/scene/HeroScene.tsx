@@ -14,6 +14,7 @@ import {
 } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { NoToneMapping, SRGBColorSpace } from 'three'
+import { useMusicPlayer } from '../audio/MusicPlayer'
 import {
   DEFAULT_SCENE,
   PRESET_KEY,
@@ -41,6 +42,7 @@ function initialConfig(): SceneConfig {
       if (saved) {
         const config = parseSceneConfig(JSON.parse(saved))
         config.model.rotation = [...DEFAULT_SCENE.model.rotation]
+        config.logo = structuredClone(DEFAULT_SCENE.logo)
         return config
       }
     } catch {
@@ -75,12 +77,18 @@ export default function HeroScene({
   onSettled: () => void
 }) {
   const [config, setConfig] = useState(initialConfig)
+  const { playing } = useMusicPlayer()
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
   const [visible, setVisible] = useState(true)
   const [quality, setQuality] = useState(1)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelRevision, setPanelRevision] = useState(0)
+  const [rotationEnabled, setRotationEnabled] = useState(true)
+  const rotationEnabledRef = useRef(rotationEnabled)
+  rotationEnabledRef.current = rotationEnabled
+  const [audioReleaseActive, setAudioReleaseActive] = useState(false)
+  const wasPlaying = useRef(false)
   const region = useRef<HTMLDivElement>(null)
   const pose = useRef<Vec3>([...config.model.rotation])
   const invalidate = useRef<() => void>(() => {})
@@ -101,6 +109,44 @@ export default function HeroScene({
     pose.current = [...config.model.rotation]
     invalidate.current()
   }, [config.model.rotation])
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== '1' || event.repeat) return
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      )
+        return
+      if (rotationEnabledRef.current) {
+        pose.current = [0, 0, 0]
+        setConfig((current) => ({
+          ...current,
+          model: { ...current.model, rotation: [0, 0, 0] },
+        }))
+        rotationEnabledRef.current = false
+        setRotationEnabled(false)
+        invalidate.current()
+      } else {
+        rotationEnabledRef.current = true
+        setRotationEnabled(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+  useEffect(() => {
+    if (playing) {
+      wasPlaying.current = true
+      setAudioReleaseActive(false)
+      return
+    }
+    if (!wasPlaying.current) return
+    wasPlaying.current = false
+    setAudioReleaseActive(true)
+    const timer = window.setTimeout(() => setAudioReleaseActive(false), 1200)
+    return () => window.clearTimeout(timer)
+  }, [playing])
   useEffect(() => {
     let intersecting = true
     const update = () => setVisible(intersecting && !document.hidden)
@@ -165,7 +211,8 @@ export default function HeroScene({
     invalidate.current()
   }
 
-  const running = visible && config.motion.speed > 0 && ready
+  const running =
+    visible && ready && (playing || audioReleaseActive || (config.motion.speed > 0 && rotationEnabled))
   return (
     <div className="scene-wrapper">
       <div
@@ -206,6 +253,7 @@ export default function HeroScene({
                 runtime={runtime}
                 cardOpen={cardOpen}
                 running={running}
+                rotationEnabled={rotationEnabled}
                 resolution={config.quality.resolution * quality}
                 onReady={handleReady}
                 onSlow={handleSlow}
@@ -226,7 +274,10 @@ export default function HeroScene({
             <>
               <span className="desktop-instruction">DRAG TO ROTATE · </span>
               <span className="mobile-instruction">SWIPE TO ROTATE · </span>
-              <span className="sr-only">Drag to rotate. Home resets. </span>EXPLORE THE VESSEL
+              <span className="sr-only">
+                Drag to rotate. Press 1 to toggle rotation movement. Home resets.{' '}
+              </span>
+              EXPLORE THE VESSEL
             </>
           )}
         </span>

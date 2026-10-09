@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Group, MathUtils, PerspectiveCamera } from 'three'
 import type { SceneConfig, Vec3 } from '../config/scene'
 import Fetus from './Fetus'
+import Logo from './Logo'
 import Stars from './Stars'
 import Nebula from './Nebula'
 import PalettePass from './PalettePass'
@@ -18,6 +19,7 @@ export default function SceneContents({
   config,
   runtime,
   running,
+  rotationEnabled,
   cardOpen,
   resolution,
   onReady,
@@ -26,6 +28,7 @@ export default function SceneContents({
   config: SceneConfig
   runtime: RuntimeScene
   running: boolean
+  rotationEnabled: boolean
   cardOpen: boolean
   resolution: number
   onReady: () => void
@@ -91,9 +94,10 @@ export default function SceneContents({
     invalidate,
   ])
   useFrame((_, delta) => {
-    if (running && !runtime.dragging.current)
+    if (running && rotationEnabled && !runtime.dragging.current) {
       runtime.pose.current[1] =
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
+    }
     if (group.current) {
       group.current.rotation.set(...runtime.pose.current)
       const smoothing = 1 - Math.exp(-Math.min(delta, 0.05) * 8)
@@ -140,7 +144,16 @@ export default function SceneContents({
       <Stars config={config.stars} />
       <group ref={group} position={config.model.position} scale={config.model.scale}>
         <Suspense fallback={null}>
-          <Fetus config={config} onReady={onReady} />
+          <>
+            <group
+              position={config.logo.position}
+              rotation={config.logo.rotation}
+              scale={0.42}
+            >
+              <Logo config={config} />
+            </group>
+            <Fetus config={config} onReady={onReady} />
+          </>
         </Suspense>
       </group>
       <PalettePass config={config} resolution={resolution} />
