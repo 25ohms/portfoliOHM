@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import SpectrumVisualizer from '../audio/SpectrumVisualizer'
+import { imageAccentColor } from '../utils/color'
 
 function formatTime(milliseconds: number) {
   return `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, '0')}`
@@ -11,112 +12,6 @@ function titleCase(title: string) {
   if (letters && letters === letters.toLowerCase()) return 'lowercase'
   if (letters && letters === letters.toUpperCase()) return 'uppercase'
   return 'mixed'
-}
-
-type Color = [number, number, number]
-
-async function artworkAccentColor(url: string, signal: AbortSignal): Promise<Color | null> {
-  const response = await fetch(url, { mode: 'cors', signal })
-  if (!response.ok) return null
-  const bitmap = await createImageBitmap(await response.blob())
-  try {
-    const canvas = document.createElement('canvas')
-    const size = 48
-    canvas.width = size
-    canvas.height = size
-    const context = canvas.getContext('2d', { willReadFrequently: true })
-    if (!context) return null
-    context.drawImage(bitmap, 0, 0, size, size)
-    const pixels = context.getImageData(0, 0, size, size).data
-    const samples: Color[] = []
-    for (let index = 0; index < pixels.length; index += 16) {
-      const color: Color = [pixels[index], pixels[index + 1], pixels[index + 2]]
-      if (Math.max(...color) > 36) samples.push(color)
-    }
-    if (!samples.length) return null
-
-    // Seed five clusters with distinct colors, then refine their average colors.
-    const centers: Color[] = [samples[0]]
-    while (centers.length < 5) {
-      let farthest = samples[0]
-      let greatestDistance = -1
-      for (const color of samples) {
-        const nearestDistance = Math.min(
-          ...centers.map((center) =>
-            color.reduce((sum, channel, index) => sum + (channel - center[index]) ** 2, 0),
-          ),
-        )
-        if (nearestDistance > greatestDistance) {
-          farthest = color
-          greatestDistance = nearestDistance
-        }
-      }
-      centers.push([...farthest])
-    }
-    for (let pass = 0; pass < 10; pass++) {
-      const sums = centers.map(() => [0, 0, 0])
-      const counts = centers.map(() => 0)
-      samples.forEach((color) => {
-        let nearest = 0
-        let distance = Number.POSITIVE_INFINITY
-        centers.forEach((center, centerIndex) => {
-          const nextDistance = color.reduce(
-            (sum, channel, index) => sum + (channel - center[index]) ** 2,
-            0,
-          )
-          if (nextDistance < distance) {
-            nearest = centerIndex
-            distance = nextDistance
-          }
-        })
-        counts[nearest]++
-        color.forEach((channel, index) => {
-          sums[nearest][index] += channel
-        })
-      })
-      centers.forEach((_, index) => {
-        if (counts[index]) centers[index] = sums[index].map((sum) => sum / counts[index]) as Color
-        else centers[index] = samples[(pass + index) % samples.length].slice() as Color
-      })
-    }
-    // Reassign once against the final centers, then choose the brightest of the
-    // five most represented clusters using perceptual sRGB luminance.
-    const counts = centers.map(() => 0)
-    samples.forEach((color) => {
-      let nearest = 0
-      let distance = Number.POSITIVE_INFINITY
-      centers.forEach((center, centerIndex) => {
-        const nextDistance = color.reduce(
-          (sum, channel, index) => sum + (channel - center[index]) ** 2,
-          0,
-        )
-        if (nextDistance < distance) {
-          nearest = centerIndex
-          distance = nextDistance
-        }
-      })
-      counts[nearest]++
-    })
-    const prominentColors = centers
-      .map((color, index) => ({ color, count: counts[index] }))
-      .filter(({ count, color }) => count > 0 && Math.max(...color) > 36)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
-    const luminance = (color: Color) => {
-      const linear = color.map((channel) => {
-        const value = channel / 255
-        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-      })
-      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
-    }
-    return prominentColors.reduce<Color | null>(
-      (brightest, entry) =>
-        !brightest || luminance(entry.color) > luminance(brightest) ? entry.color : brightest,
-      null,
-    )
-  } finally {
-    bitmap.close()
-  }
 }
 
 export default function AudioCard() {
@@ -209,7 +104,7 @@ export default function AudioCard() {
     }
     setArtworkAccent(null)
     const controller = new AbortController()
-    void artworkAccentColor(artworkUrl, controller.signal)
+    void imageAccentColor(artworkUrl, controller.signal)
       .then((color) => {
         if (controller.signal.aborted) return
         setArtworkAccent(color ? `rgb(${color.map(Math.round).join(' ')})` : null)
