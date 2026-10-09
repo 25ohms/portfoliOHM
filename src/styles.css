@@ -684,6 +684,7 @@ button {
   transform: scale(var(--artwork-scale, 0.3));
   transform-origin: top right;
   overflow: hidden;
+  border: 1px solid var(--accent);
   background: radial-gradient(ellipse at 50% 40%, #18433c 0, #081412 56%, #030707 100%);
   pointer-events: none;
   transition: transform 360ms linear;
