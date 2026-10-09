@@ -14,7 +14,7 @@ const dialItems = [
   { label: 'Shows', href: 'https://ra.co/dj/25ohms' },
   { label: 'Contact', href: socialLinks.instagram.href },
 ]
-const scrollableCardSelector = '.content-card, .audio-card-body'
+const scrollableCardSelector = '.content-card, .track-list'
 
 export default function App() {
   return (
@@ -76,9 +76,8 @@ function PortfolioExperience() {
 
   useEffect(() => {
     if (siteReady) return
-    const sceneProgress = sceneSettled ? 0.15 : 0
-    setLoadingProgress(Math.min(0.99, sceneProgress + player.waveformProgress * 0.85))
-  }, [player.waveformProgress, sceneSettled, siteReady])
+    setLoadingProgress(sceneSettled ? 0.15 : 0)
+  }, [sceneSettled, siteReady])
 
   useEffect(() => {
     if (!sceneSettled || player.catalogueStatus !== 'ready') return
