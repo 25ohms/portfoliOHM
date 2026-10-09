@@ -510,9 +510,6 @@ button {
   height: 100%;
   object-fit: cover;
 }
-.now-playing-bar-artwork img {
-  filter: grayscale(1);
-}
 .now-playing-control {
   display: grid;
   place-items: center;
@@ -950,6 +947,148 @@ button {
   height: auto;
   transform: translateY(-50%);
 }
+.shows-card {
+  bottom: calc(clamp(24px, 5vh, 56px) + 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.shows-card > .card-heading {
+  flex: 0 0 auto;
+  align-items: flex-end;
+}
+.shows-ra-link,
+.show-ticket-link {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font: 8px/1.4 var(--font-ui);
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.shows-ra-link {
+  padding: 9px 10px;
+  white-space: nowrap;
+}
+.shows-ra-link:hover,
+.show-ticket-link:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+}
+.shows-message,
+.show-empty {
+  color: var(--muted);
+  font: 10px/1.7 var(--font-ui);
+}
+.shows-message a {
+  color: var(--accent);
+}
+.show-sections {
+  display: grid;
+  gap: 26px;
+}
+.show-section h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 6px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+  color: var(--accent);
+  font: 10px/1.4 var(--font-ui);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.show-section h3 span {
+  color: var(--muted);
+}
+.show-empty {
+  margin: 14px 0 0;
+}
+.show-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.show-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 170px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.show-date {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font: 9px/1.5 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.show-info {
+  min-width: 0;
+  font-family: var(--font-ui);
+}
+.show-flyer-slot {
+  width: 82px;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    #050c0b;
+}
+.show-flyer-slot.is-empty {
+  opacity: 0.2;
+}
+.show-flyer {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.show-flyer.is-unavailable {
+  visibility: hidden;
+}
+.show-copy {
+  min-width: 0;
+}
+.show-info h4 {
+  margin: 0;
+  color: var(--ink);
+  font: 700 16px/1.45 var(--font-ui);
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+.show-info p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font: 13px/1.55 var(--font-ui);
+  overflow-wrap: anywhere;
+}
+.show-info .show-promoter {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.show-promoter-names {
+  color: var(--ink);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.show-promoter-names a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 2px;
+}
+.show-promoter-names a:hover {
+  color: var(--ink);
+}
+.show-ticket-link {
+  padding: 10px 12px;
+  white-space: nowrap;
+}
 .crt-overlay {
   position: absolute;
   z-index: 8;
@@ -1043,6 +1182,9 @@ button {
     width: var(--card-width);
     padding: 18px;
   }
+  .shows-card {
+    bottom: 82px;
+  }
   .now-playing-bar {
     width: var(--card-width);
   }
@@ -1055,6 +1197,31 @@ button {
   }
   .content-card .card-heading h2 {
     font-size: clamp(23px, 5vw, 34px);
+  }
+  .shows-card > .card-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .shows-ra-link {
+    max-width: 94px;
+    padding: 7px 6px;
+    font-size: 7px;
+  }
+  .show-row {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 8px 12px;
+  }
+  .show-date {
+    grid-column: auto;
+  }
+  .show-ticket-link {
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding: 8px 10px;
+    font-size: 7px;
+  }
+  .show-flyer-slot {
+    width: 64px;
   }
   .scene-layer .dev-toggle {
     right: 14px;
@@ -1092,6 +1259,12 @@ button {
     right: 8px;
     bottom: 12px;
     padding: 14px;
+  }
+  .shows-card {
+    bottom: 78px;
+  }
+  .show-info h4 {
+    font-size: 14px;
   }
   .now-playing-bar {
     grid-template-columns: 34px 28px 32px 28px minmax(60px, 1fr) minmax(50px, 1fr) 27px;
@@ -1150,6 +1323,9 @@ button {
     top: 14px;
     right: 14px;
     bottom: 14px;
+  }
+  .shows-card {
+    bottom: 78px;
   }
   .selection-panel {
     top: 50%;

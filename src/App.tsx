@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import AudioCard from './cards/AudioCard'
+import ShowsCard from './cards/ShowsCard'
 import { MusicPlayerProvider, useMusicPlayer } from './audio/MusicPlayer'
 import NowPlayingBar from './audio/NowPlayingBar'
 import LoadingScreen from './components/LoadingScreen'
@@ -11,7 +12,7 @@ const dialItems = [
   { label: 'Ω', logo: true },
   { label: 'Audio' },
   { label: 'Visual', href: 'https://www.youtube.com/@twentyfiveohms' },
-  { label: 'Shows', href: 'https://ra.co/dj/25ohms' },
+  { label: 'Shows' },
   { label: 'Contact', href: socialLinks.instagram.href },
 ]
 const scrollableCardSelector = '.content-card, .track-list'
@@ -32,6 +33,7 @@ function PortfolioExperience() {
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [siteReady, setSiteReady] = useState(false)
   const [loaderRemoved, setLoaderRemoved] = useState(false)
+  const [showsAccent, setShowsAccent] = useState<string | null>(null)
   const lastWheelMove = useRef(0)
   const active = dialItems[selected]
   const move = useCallback(
@@ -91,13 +93,13 @@ function PortfolioExperience() {
 
   useEffect(() => {
     const root = document.documentElement
-    const accent = selected === 1 ? player.artworkAccent : null
+    const accent = selected === 1 ? player.artworkAccent : selected === 3 ? showsAccent : null
     root.style.setProperty(
       '--accent',
       accent || root.style.getPropertyValue('--default-accent') || '#8effdc',
     )
     root.style.setProperty('--accent-shift', accent ? '100%' : '0%')
-  }, [selected, player.artworkAccent])
+  }, [selected, player.artworkAccent, showsAccent])
 
   useEffect(() => {
     const timers = new Map<HTMLElement, number>()
@@ -196,6 +198,7 @@ function PortfolioExperience() {
           </section>
         )}
         {selected === 1 && <AudioCard />}
+        {selected === 3 && <ShowsCard onAccentChange={setShowsAccent} />}
         {selected > 1 && active.href && (
           <section className="content-card selection-panel" key={active.label} aria-live="polite">
             <header className="card-heading">

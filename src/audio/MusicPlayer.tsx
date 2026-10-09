@@ -85,6 +85,13 @@ function publicUrl(path: string) {
   return `${bucketUrl}/${path.split('/').map(encodeURIComponent).join('/')}`
 }
 
+function publicArtworkUrl(path: string) {
+  if (import.meta.env.DEV) {
+    return `/api/r2/${path.split('/').map(encodeURIComponent).join('/')}`
+  }
+  return publicUrl(path)
+}
+
 function parseIndex(source: string) {
   const rows = source.split(/\r?\n/).map((line) => line.trim())
   const projects: Array<{ id: string; title: string; prefix: string }> = []
@@ -144,7 +151,7 @@ async function fetchCatalogue(signal: AbortSignal) {
     entries.map(async (entry) => {
       const base = `music/${entry.prefix}`
       const artworkUrl = projectArtworkPaths[entry.title]
-        ? publicUrl(`music/${projectArtworkPaths[entry.title]}`)
+        ? publicArtworkUrl(`music/${projectArtworkPaths[entry.title]}`)
         : ''
       try {
         const response = await fetch(publicUrl(`${base}/tracklist.txt`), {
@@ -168,7 +175,7 @@ async function fetchCatalogue(signal: AbortSignal) {
               title: trackTitle,
               audioUrl: publicUrl(`music/${trackAssets?.audio ?? `${entry.prefix}/${trackTitle}.wav`}`),
               artworkUrl: trackAssets?.artwork
-                ? publicUrl(`music/${trackAssets.artwork}`)
+                ? publicArtworkUrl(`music/${trackAssets.artwork}`)
                 : artworkUrl,
             }
           }),
