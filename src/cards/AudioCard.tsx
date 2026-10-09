@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { useMusicPlayer } from '../audio/MusicPlayer'
-import Waveform from './Waveform'
+import SpectrumVisualizer from '../audio/SpectrumVisualizer'
 
 function formatTime(milliseconds: number) {
   return `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, '0')}`
@@ -121,60 +121,80 @@ async function artworkAccentColor(url: string, signal: AbortSignal): Promise<Col
 
 export default function AudioCard() {
   const player = useMusicPlayer()
-  const { setArtworkAccent } = player
-  const scrollArea = useRef<HTMLDivElement>(null)
+  const { selectedProjectId, setArtworkAccent } = player
+  const audioBody = useRef<HTMLDivElement>(null)
+  const trackListElement = useRef<HTMLDivElement>(null)
   const headingElement = useRef<HTMLElement>(null)
   const headingTitleElement = useRef<HTMLHeadingElement>(null)
   const artworkElement = useRef<HTMLDivElement>(null)
-  const artworkExpandedRef = useRef(true)
-  const collapseDistance = useRef(1)
-  const [artworkExpanded, setArtworkExpanded] = useState(true)
+  const artworkSpaceElement = useRef<HTMLDivElement>(null)
+  const nowPlayingTitleElement = useRef<HTMLDivElement>(null)
+  const nowPlayingTextElement = useRef<HTMLSpanElement>(null)
+  const [artworkExpanded, setArtworkExpanded] = useState(false)
+  const [titleOverflows, setTitleOverflows] = useState(false)
   const artworkUrl = player.currentTrack?.artworkUrl
+  const trackTitle = player.currentTrack?.title || 'Select a track'
   const displayedPosition = player.duration ? Math.min(player.position, player.duration) : 0
 
-  useEffect(() => {
-    const element = scrollArea.current
+  useLayoutEffect(() => {
+    const titleViewport = nowPlayingTitleElement.current
+    const titleText = nowPlayingTextElement.current
+    if (!titleViewport || !titleText) return
+    const measure = () => setTitleOverflows(titleText.scrollWidth > titleViewport.clientWidth + 1)
+    const observer = new ResizeObserver(measure)
+    observer.observe(titleViewport)
+    observer.observe(titleText)
+    measure()
+    return () => observer.disconnect()
+  }, [trackTitle])
+
+  useLayoutEffect(() => {
     const heading = headingElement.current
     const headingTitle = headingTitleElement.current
     const artwork = artworkElement.current
-    if (!element || !heading || !headingTitle || !artwork) return
-    let frame = 0
+    const artworkSpace = artworkSpaceElement.current
+    const titleViewport = nowPlayingTitleElement.current
+    const body = audioBody.current
+    if (!heading || !headingTitle || !artwork || !artworkSpace || !titleViewport || !body) return
     const updateArtworkSize = () => {
-      frame = 0
-      const maximumWidth = element.clientWidth
-      const headingTitleHeight = headingTitle.getBoundingClientRect().height
-      const minimumWidth = Math.min(headingTitleHeight, maximumWidth)
-      const distance = Math.max(1, maximumWidth - minimumWidth)
-      const progress = Math.max(0, Math.min(1, element.scrollTop / distance))
-      const mappedWidth = maximumWidth - (maximumWidth - minimumWidth) * progress
-      const expandedTop = heading.clientHeight + 20
+      if (artworkExpanded) return
+      const maximumWidth = heading.clientWidth
+      const headingTop = headingTitle.getBoundingClientRect().top
+      const artworkSpaceStyle = getComputedStyle(artworkSpace)
+      // Remove the spacer from this measurement so an in-progress collapse
+      // still yields the artwork's compact size.
+      const artworkSpaceHeight =
+        artworkSpace.getBoundingClientRect().height + (parseFloat(artworkSpaceStyle.marginTop) || 0)
+      const minimumWidth = Math.min(
+        maximumWidth,
+        Math.max(
+          headingTitle.getBoundingClientRect().height,
+          titleViewport.getBoundingClientRect().bottom - headingTop - artworkSpaceHeight,
+        ),
+      )
+      const artworkScale = maximumWidth > 0 ? minimumWidth / maximumWidth : 1
       const collapsedTop =
-        headingTitle.getBoundingClientRect().top - heading.getBoundingClientRect().top
-      const artworkTop = expandedTop + (collapsedTop - expandedTop) * progress
-      collapseDistance.current = distance
-      artwork.style.setProperty('--artwork-width', `${mappedWidth}px`)
-      artwork.style.setProperty('--artwork-top', `${artworkTop}px`)
-      const expanded = progress < 0.5
-      if (expanded !== artworkExpandedRef.current) {
-        artworkExpandedRef.current = expanded
-        setArtworkExpanded(expanded)
-      }
+        headingTop - heading.getBoundingClientRect().top
+      heading.style.setProperty('--artwork-width-max', `${maximumWidth}px`)
+      heading.style.setProperty('--artwork-scale', String(artworkScale))
+      heading.style.setProperty('--artwork-top-min', `${collapsedTop}px`)
+      heading.style.setProperty('--artwork-top-max', `${heading.clientHeight + 20}px`)
+      artworkSpace.style.setProperty('--artwork-space-height', `${maximumWidth}px`)
+      body.style.setProperty('--compact-artwork-width', `${minimumWidth}px`)
     }
-    const scheduleUpdate = () => {
-      if (!frame) frame = requestAnimationFrame(updateArtworkSize)
-    }
-    const resizeObserver = new ResizeObserver(scheduleUpdate)
-    resizeObserver.observe(element)
+    const resizeObserver = new ResizeObserver(updateArtworkSize)
     resizeObserver.observe(heading)
     resizeObserver.observe(headingTitle)
-    element.addEventListener('scroll', scheduleUpdate, { passive: true })
+    resizeObserver.observe(titleViewport)
     updateArtworkSize()
     return () => {
-      element.removeEventListener('scroll', scheduleUpdate)
       resizeObserver.disconnect()
-      if (frame) cancelAnimationFrame(frame)
     }
-  }, [artworkUrl])
+  }, [artworkExpanded, artworkUrl, selectedProjectId])
+
+  useLayoutEffect(() => {
+    trackListElement.current?.scrollTo({ top: 0 })
+  }, [selectedProjectId])
 
   useEffect(() => {
     return () => {
@@ -183,17 +203,15 @@ export default function AudioCard() {
   }, [setArtworkAccent])
 
   useEffect(() => {
-    if (player.currentTrack) player.requestWaveform(player.currentTrack)
-  }, [player.currentTrack, player.requestWaveform])
-
-  useEffect(() => {
     if (!artworkUrl) {
       setArtworkAccent(null)
       return
     }
+    setArtworkAccent(null)
     const controller = new AbortController()
     void artworkAccentColor(artworkUrl, controller.signal)
       .then((color) => {
+        if (controller.signal.aborted) return
         setArtworkAccent(color ? `rgb(${color.map(Math.round).join(' ')})` : null)
       })
       .catch(() => {
@@ -213,97 +231,107 @@ export default function AudioCard() {
             type="button"
             className={`catalogue-tab${project.id === player.selectedProjectId ? ' is-selected' : ''}`}
             aria-pressed={project.id === player.selectedProjectId}
-            onClick={() => player.selectProject(project.id)}
+            onClick={() => {
+              setArtworkExpanded(false)
+              player.selectProject(project.id)
+            }}
           >
             {project.title}
           </button>
         ))}
       </nav>
-      <header ref={headingElement} className="card-heading">
+      <header
+        ref={headingElement}
+        className={`card-heading${artworkExpanded ? ' is-artwork-expanded' : ''}`}
+      >
         <div>
           <h2 ref={headingTitleElement}>Audio</h2>
         </div>
         {artworkUrl && (
-          <div ref={artworkElement} className="artwork-visual">
-            <img src={artworkUrl} alt="" />
-            <button
-              className="artwork-toggle"
-              type="button"
-              aria-label={artworkExpanded ? 'Collapse artwork' : 'Expand artwork'}
-              aria-expanded={artworkExpanded}
-              onClick={() => {
-                scrollArea.current?.scrollTo({
-                  top: artworkExpanded ? collapseDistance.current : 0,
-                  behavior: 'smooth',
-                })
-              }}
-            >
-              {artworkExpanded ? '−' : '↗'}
-            </button>
+          <div
+            ref={artworkElement}
+            className={`artwork-visual${artworkExpanded ? ' is-expanded' : ''}`}
+          >
+            <img src={artworkUrl} alt="" fetchPriority="high" />
           </div>
         )}
+        {artworkUrl && (
+          <button
+            className={`artwork-toggle${artworkExpanded ? ' is-expanded' : ''}`}
+            type="button"
+            aria-label={artworkExpanded ? 'Collapse artwork' : 'Expand artwork'}
+            aria-expanded={artworkExpanded}
+            onClick={() => setArtworkExpanded((expanded) => !expanded)}
+          >
+            {artworkExpanded ? '−' : '↗'}
+          </button>
+        )}
       </header>
-      <div ref={scrollArea} className="audio-card-body">
+      <div
+        ref={audioBody}
+        className={`audio-card-body${artworkExpanded ? ' is-artwork-expanded' : ''}`}
+      >
         {player.catalogueError && player.tracks.length > 0 && (
           <p className="catalogue-warning" role="status">
             {player.catalogueError}{' '}
             <button className="catalogue-retry" onClick={player.retryCatalogue}>RETRY</button>
           </p>
         )}
-        {artworkUrl && <div className="track-artwork" aria-hidden="true" />}
-        <div className="now-playing">
-          <span className="eyebrow">NOW PLAYING</span>
-          <strong className={`now-playing-title is-${titleCase(player.currentTrack?.title || '')}`}>
-            {player.currentTrack?.title || 'Select a track'}
-          </strong>
-          <span>25OHMS / AUDIO</span>
+        {artworkUrl && <div ref={artworkSpaceElement} className="track-artwork" aria-hidden="true" />}
+        <div className="audio-player-main">
+          <div className="now-playing">
+            <span className="eyebrow">NOW PLAYING</span>
+            <div
+              ref={nowPlayingTitleElement}
+              className={`now-playing-title${titleOverflows ? ' is-overflowing' : ''}`}
+            >
+              <strong className={`is-${titleCase(trackTitle)}`}>
+                <span ref={nowPlayingTextElement}>{trackTitle}</span>
+                {titleOverflows && <span aria-hidden="true">{trackTitle}</span>}
+              </strong>
+            </div>
+          </div>
+          <div className="spectrum-display">
+            <SpectrumVisualizer
+              analyser={player.analyser}
+              playing={player.playing}
+              accent={player.artworkAccent}
+            />
+          </div>
+          <div className="timeline">
+            <span>{formatTime(displayedPosition)}</span>
+            <input
+              aria-label="Track position"
+              type="range"
+              min="0"
+              max={player.duration || 1}
+              value={Math.min(displayedPosition, player.duration || 1)}
+              onChange={(event) => player.seekTo(Number(event.target.value))}
+              style={
+                {
+                  '--timeline-progress': `${player.duration ? (player.position / player.duration) * 100 : 0}%`,
+                } as CSSProperties
+              }
+            />
+            <span>{formatTime(player.duration)}</span>
+          </div>
+          <div className="player-controls">
+            <button aria-label="Previous track" onClick={() => player.skipTrack(-1)}>
+              ◂◂
+            </button>
+            <button
+              className="play-button"
+              aria-label={player.playing ? 'Pause' : 'Play'}
+              onClick={player.togglePlayback}
+            >
+              {player.playing ? 'Ⅱ' : '▶'}
+            </button>
+            <button aria-label="Next track" onClick={() => player.skipTrack(1)}>
+              ▸▸
+            </button>
+          </div>
         </div>
-        <div className="waveform">
-          <Waveform
-            peaks={player.currentTrack ? player.waveforms[player.currentTrack.id] : undefined}
-            progress={player.duration ? displayedPosition / player.duration : 0}
-            ready={player.waveformsReady}
-            onSeek={(progress) => {
-              if (player.duration) player.seekTo(progress * player.duration)
-            }}
-          />
-        </div>
-        {player.waveformError && (
-          <p className="waveform-error" role="status">{player.waveformError}</p>
-        )}
-        <div className="timeline">
-          <span>{formatTime(displayedPosition)}</span>
-          <input
-            aria-label="Track position"
-            type="range"
-            min="0"
-            max={player.duration || 1}
-            value={Math.min(displayedPosition, player.duration || 1)}
-            onChange={(event) => player.seekTo(Number(event.target.value))}
-            style={
-              {
-                '--timeline-progress': `${player.duration ? (player.position / player.duration) * 100 : 0}%`,
-              } as CSSProperties
-            }
-          />
-          <span>{formatTime(player.duration)}</span>
-        </div>
-        <div className="player-controls">
-          <button aria-label="Previous track" onClick={() => player.skipTrack(-1)}>
-            ◂◂
-          </button>
-          <button
-            className="play-button"
-            aria-label={player.playing ? 'Pause' : 'Play'}
-            onClick={player.togglePlayback}
-          >
-            {player.playing ? 'Ⅱ' : '▶'}
-          </button>
-          <button aria-label="Next track" onClick={() => player.skipTrack(1)}>
-            ▸▸
-          </button>
-        </div>
-        <div className="track-list">
+        <div ref={trackListElement} className="track-list">
           <div className="track-list-head">
             <span>PROJECT TRACKS</span>
             <span>

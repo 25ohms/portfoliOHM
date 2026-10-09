@@ -4,6 +4,7 @@ import Waveform from '../cards/Waveform'
 
 export default function NowPlayingBar({ hidden }: { hidden: boolean }) {
   const player = useMusicPlayer()
+  const { currentTrack, requestWaveform } = player
   const artworkCanvas = useRef<HTMLCanvasElement>(null)
   const [artworkFallback, setArtworkFallback] = useState(false)
   const artwork = player.currentTrack?.artworkUrl
@@ -14,10 +15,10 @@ export default function NowPlayingBar({ hidden }: { hidden: boolean }) {
     '#8effdc'
 
   useEffect(() => {
-    if (!hidden && player.playing && player.currentTrack) {
-      player.requestWaveform(player.currentTrack)
+    if (!hidden && currentTrack) {
+      requestWaveform(currentTrack)
     }
-  }, [hidden, player.currentTrack, player.playing, player.requestWaveform])
+  }, [currentTrack, hidden, requestWaveform])
 
   useEffect(() => {
     const canvas = artworkCanvas.current

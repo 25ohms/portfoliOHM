@@ -61,7 +61,7 @@ type PlayerState = {
   trackIndex: number
   currentTrack: MusicTrack | null
   catalogueStatus: 'loading' | 'ready' | 'error'
-  waveformProgress: number
+  analyser: AnalyserNode | null
   catalogueError: string | null
   playbackError: string | null
   playing: boolean
@@ -207,7 +207,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const waveformRequests = useRef(new Map<string, AbortController>())
   const waveformSelection = useRef<string | null>(null)
   const [catalogueStatus, setCatalogueStatus] = useState<PlayerState['catalogueStatus']>('loading')
-  const [waveformProgress, setWaveformProgress] = useState(0)
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
+  const audioContext = useRef<AudioContext | null>(null)
   const [catalogueError, setCatalogueError] = useState<string | null>(null)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -233,13 +234,12 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     waveformRequests.current.clear()
     waveformSelection.current = null
     setWaveforms((current) => ({ ...current, ...waveformCache.current }))
-    setWaveformProgress(0)
     setWaveformsReady(false)
     setWaveformError(null)
     setCatalogueStatus('loading')
     setCatalogueError(null)
     void fetchCatalogue(controller.signal)
-      .then(async ({ projects: loadedProjects, errors }) => {
+      .then(({ projects: loadedProjects, errors }) => {
         if (requestId !== catalogueRequest.current) return
         setProjects(loadedProjects)
         const selected = loadedProjects[0]
@@ -247,27 +247,6 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         setCurrentTrack(selected?.tracks[0] ?? null)
         setCatalogueError(errors.length ? errors.join(' · ') : null)
 
-        const allTracks = loadedProjects.flatMap((project) => project.tracks)
-        let completed = 0
-        setWaveformProgress(allTracks.length ? 0 : 1)
-        for (const track of allTracks) {
-          if (controller.signal.aborted) return
-          let peaks = waveformCache.current[track.id]
-          if (!peaks) {
-            try {
-              peaks = await calculateWaveformPeaks(track.audioUrl, controller.signal)
-            } catch (error) {
-              if (controller.signal.aborted) return
-              throw new Error(
-                `Could not prepare the waveform for ${track.title}: ${error instanceof Error ? error.message : 'audio decode failed'}`,
-              )
-            }
-            waveformCache.current[track.id] = peaks
-            setWaveforms((current) => ({ ...current, [track.id]: peaks }))
-          }
-          completed++
-          setWaveformProgress(completed / allTracks.length)
-        }
         if (requestId !== catalogueRequest.current) return
         setWaveformsReady(true)
         setCatalogueStatus('ready')
@@ -287,6 +266,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => {
     catalogueController.current?.abort()
     waveformRequests.current.forEach((controller) => controller.abort())
+    void audioContext.current?.close()
   }, [])
 
   useEffect(() => {
@@ -367,6 +347,20 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     const element = audio.current
     if (!element || !currentTrack) return
     try {
+      if (!audioContext.current) {
+        const context = new AudioContext()
+        const source = context.createMediaElementSource(element)
+        const analyserNode = context.createAnalyser()
+        const gain = context.createGain()
+        analyserNode.fftSize = 2048
+        analyserNode.smoothingTimeConstant = 0.7
+        source.connect(analyserNode)
+        analyserNode.connect(gain)
+        gain.connect(context.destination)
+        audioContext.current = context
+        setAnalyser(analyserNode)
+      }
+      await audioContext.current.resume()
       await element.play()
     } catch {
       setPlaybackError('Playback could not start. Press play to try again.')
@@ -463,7 +457,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     trackIndex,
     currentTrack,
     catalogueStatus,
-    waveformProgress,
+    analyser,
     catalogueError,
     playbackError,
     playing,
