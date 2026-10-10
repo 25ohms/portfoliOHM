@@ -10,6 +10,7 @@ import PalettePass from './PalettePass'
 import { cameraDistance } from './math'
 import Enterprise from './Enterprise'
 import { useMusicPlayer } from '../audio/MusicPlayer'
+import { recordSceneFrame } from '../utils/performanceLogger'
 
 export interface RuntimeScene {
   pose: MutableRefObject<Vec3>
@@ -39,7 +40,11 @@ export default function SceneContents({
   const group = useRef<Group>(null)
   const { currentTrack, playing } = useMusicPlayer()
   const showEnterprise =
-    playing && currentTrack?.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === 'finalfrontier'
+    playing &&
+    currentTrack?.title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '') === 'finalfrontier'
   const layoutTarget = useRef({ x: config.model.position[0], scale: config.model.scale })
   const { camera, size, invalidate } = useThree()
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
@@ -99,6 +104,7 @@ export default function SceneContents({
     invalidate,
   ])
   useFrame((_, delta) => {
+    recordSceneFrame(delta * 1000)
     if (running && rotationEnabled && !runtime.dragging.current) {
       runtime.pose.current[1] =
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
@@ -150,11 +156,7 @@ export default function SceneContents({
       <group ref={group} position={config.model.position} scale={config.model.scale}>
         <Suspense fallback={null}>
           <>
-            <group
-              position={config.logo.position}
-              rotation={config.logo.rotation}
-              scale={0.42}
-            >
+            <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
               <Logo config={config} />
             </group>
             <Fetus config={config} onReady={onReady} />

@@ -16,10 +16,17 @@ import { FetusLoader } from './FetusLoader'
 import logoUrl from '../../models/ohmLOGO/ohmLOGO.fbx?url'
 import type { SceneConfig } from '../config/scene'
 import { useMusicPlayer } from '../audio/MusicPlayer'
+import { logPerformance } from '../utils/performanceLogger'
 
 const HALO_SCALE = 1.04
 
-function bandLevel(data: Uint8Array, sampleRate: number, fftSize: number, low: number, high: number) {
+function bandLevel(
+  data: Uint8Array,
+  sampleRate: number,
+  fftSize: number,
+  low: number,
+  high: number,
+) {
   const binWidth = sampleRate / fftSize
   const first = Math.max(0, Math.floor(low / binWidth))
   const last = Math.min(data.length - 1, Math.ceil(high / binWidth))
@@ -43,6 +50,7 @@ export default function Logo({ config }: { config: SceneConfig }) {
     [analyser],
   )
   const { normalized, coreMaterial, haloMaterial, geometries, normalizationScale } = useMemo(() => {
+    const startedAt = performance.now()
     const object = clone(original)
     const halo = clone(original)
     const geometries: Array<{ geometry: BufferGeometry; base: Float32Array }> = []
@@ -93,6 +101,14 @@ export default function Logo({ config }: { config: SceneConfig }) {
     haloGroup.scale.setScalar(HALO_SCALE)
     normalized.add(haloGroup)
     normalized.scale.setScalar(scale)
+    logPerformance('OHM_LOGO_GEOMETRY_PREPARED', {
+      meshCount: geometries.length,
+      vertexCount: geometries.reduce(
+        (count, item) => count + item.geometry.getAttribute('position').count,
+        0,
+      ),
+      durationMs: Math.round(performance.now() - startedAt),
+    })
     return { normalized, coreMaterial, haloMaterial, geometries, normalizationScale: scale }
   }, [original])
 
@@ -144,7 +160,11 @@ export default function Logo({ config }: { config: SceneConfig }) {
       (bassTarget - signal.vibration) * (1 - Math.exp(-Math.min(delta, 0.05) * vibrationRate))
     const intensity = signal.level
     const base = config.material.intensity
-    coreMaterial.color.setRGB(base + intensity * 0.9, base + intensity * 0.9, base + intensity * 0.9)
+    coreMaterial.color.setRGB(
+      base + intensity * 0.9,
+      base + intensity * 0.9,
+      base + intensity * 0.9,
+    )
     coreMaterial.opacity = config.material.opacity + intensity * (1 - config.material.opacity)
     haloMaterial.color.setRGB(1.8, 1.8, 1.8)
     haloMaterial.opacity = intensity * 0.9

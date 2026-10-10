@@ -1,4 +1,5 @@
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
+import { logPerformance } from '../utils/performanceLogger'
 
 /** Ignore two MODO export artifacts that FBXLoader cannot consume: an empty
  * normals layer and an unconnected MODO_RenderSettings model. Only their node
@@ -46,6 +47,14 @@ export function repairFetusExport(source: ArrayBuffer): ArrayBuffer {
 
 export class FetusLoader extends FBXLoader {
   override parse(buffer: ArrayBuffer, path: string) {
-    return super.parse(repairFetusExport(buffer), path)
+    const startedAt = performance.now()
+    const repaired = repairFetusExport(buffer)
+    const object = super.parse(repaired, path)
+    logPerformance('FBX_PARSE_COMPLETE', {
+      asset: path.toLowerCase().includes('ohmlogo') ? 'ohm-logo' : 'fetus',
+      bytes: buffer.byteLength,
+      durationMs: Math.round(performance.now() - startedAt),
+    })
+    return object
   }
 }

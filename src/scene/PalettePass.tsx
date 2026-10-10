@@ -16,6 +16,7 @@ import {
 } from 'three'
 import type { SceneConfig } from '../config/scene'
 import { paletteBytes } from './math'
+import { logPerformance } from '../utils/performanceLogger'
 
 function accentPalette(config: SceneConfig, accentValue: string, accentShift: number) {
   const accent = new Color().setStyle(accentValue, SRGBColorSpace)
@@ -72,6 +73,7 @@ export default function PalettePass({
 }) {
   const { gl, size, invalidate } = useThree()
   const lastAccent = useMemo(() => ({ current: '' }), [])
+  const firstRenderLogged = useMemo(() => ({ current: false }), [])
   const resources = useMemo(() => {
     const target = new WebGLRenderTarget(1, 1, { depthBuffer: true })
     const palette = new DataTexture(new Uint8Array(256 * 4), 256, 1, RGBAFormat)
@@ -190,11 +192,30 @@ export default function PalettePass({
   )
 
   useFrame(({ scene, camera }) => {
+    const startedAt = performance.now()
     gl.setRenderTarget(resources.target)
     gl.clear()
     gl.render(scene, camera)
+    const sceneSubmitMs = performance.now() - startedAt
+    const sceneDrawCalls = gl.info.render.calls
+    const sceneTriangles = gl.info.render.triangles
     gl.setRenderTarget(null)
     gl.render(resources.screen, resources.camera)
+    const paletteDrawCalls = gl.info.render.calls
+    const paletteTriangles = gl.info.render.triangles
+    if (!firstRenderLogged.current) {
+      firstRenderLogged.current = true
+      logPerformance('PALETTE_PASS_FIRST_RENDER', {
+        sceneSubmitMs: Math.round(sceneSubmitMs * 10) / 10,
+        totalSubmitMs: Math.round((performance.now() - startedAt) * 10) / 10,
+        sceneDrawCalls,
+        sceneTriangles,
+        paletteDrawCalls,
+        paletteTriangles,
+        renderTargetWidth: resources.target.width,
+        renderTargetHeight: resources.target.height,
+      })
+    }
   }, 1)
   return null
 }

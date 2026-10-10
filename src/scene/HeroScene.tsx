@@ -15,6 +15,7 @@ import {
 import { Canvas } from '@react-three/fiber'
 import { NoToneMapping, SRGBColorSpace } from 'three'
 import { useMusicPlayer } from '../audio/MusicPlayer'
+import { logPerformance } from '../utils/performanceLogger'
 import {
   DEFAULT_SCENE,
   PRESET_KEY,
@@ -103,7 +104,10 @@ export default function HeroScene({
     setFailed(true)
     onSettled()
   }, [onSettled])
-  const handleSlow = useCallback(() => setQuality(0.65), [])
+  const handleSlow = useCallback(() => {
+    logPerformance('SUSTAINED_LOW_FPS_QUALITY_REDUCTION', { resolutionScale: 0.65 })
+    setQuality(0.65)
+  }, [])
 
   useEffect(() => {
     pose.current = [...config.model.rotation]
@@ -212,7 +216,9 @@ export default function HeroScene({
   }
 
   const running =
-    visible && ready && (playing || audioReleaseActive || (config.motion.speed > 0 && rotationEnabled))
+    visible &&
+    ready &&
+    (playing || audioReleaseActive || (config.motion.speed > 0 && rotationEnabled))
   return (
     <div className="scene-wrapper">
       <div
@@ -244,6 +250,20 @@ export default function HeroScene({
               onCreated={({ gl }) => {
                 gl.toneMapping = NoToneMapping
                 gl.outputColorSpace = SRGBColorSpace
+                const context = gl.getContext()
+                const debugInfo = context.getExtension('WEBGL_debug_renderer_info')
+                logPerformance('WEBGL_CONTEXT_CREATED', {
+                  renderer: debugInfo
+                    ? context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+                    : context.getParameter(context.RENDERER),
+                  vendor: debugInfo
+                    ? context.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)
+                    : context.getParameter(context.VENDOR),
+                  canvasWidth: gl.domElement.width,
+                  canvasHeight: gl.domElement.height,
+                  pixelRatio: gl.getPixelRatio(),
+                  maxTextureSize: context.getParameter(context.MAX_TEXTURE_SIZE),
+                })
                 gl.domElement.addEventListener('webglcontextlost', handleError, { once: true })
               }}
               fallback={<p>View the OHMEGA still image.</p>}

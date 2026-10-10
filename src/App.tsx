@@ -5,6 +5,8 @@ import { MusicPlayerProvider, useMusicPlayer } from './audio/MusicPlayer'
 import NowPlayingBar from './audio/NowPlayingBar'
 import LoadingScreen from './components/LoadingScreen'
 import { socialLinks } from './data/artist'
+import { logPerformance } from './utils/performanceLogger'
+import { preloadArtwork } from './audio/artworkCache'
 
 const HeroScene = lazy(() => import('./scene/HeroScene'))
 
@@ -32,6 +34,7 @@ function PortfolioExperience() {
   const [sceneSettled, setSceneSettled] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [siteReady, setSiteReady] = useState(false)
+  const [preparedArtworkUrl, setPreparedArtworkUrl] = useState<string | null>(null)
   const [loaderRemoved, setLoaderRemoved] = useState(false)
   const [showsAccent, setShowsAccent] = useState<string | null>(null)
   const lastWheelMove = useRef(0)
@@ -46,7 +49,8 @@ function PortfolioExperience() {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
-      if (target.closest('input:not([type="range"]), textarea, select, [contenteditable="true"]')) return
+      if (target.closest('input:not([type="range"]), textarea, select, [contenteditable="true"]'))
+        return
       if (event.key === ' ' || event.code === 'Space') {
         if (event.repeat) return
         event.preventDefault()
@@ -81,15 +85,53 @@ function PortfolioExperience() {
     setLoadingProgress(sceneSettled ? 0.15 : 0)
   }, [sceneSettled, siteReady])
 
+  const artworkUrl = player.currentTrack?.artworkUrl
   useEffect(() => {
-    if (!sceneSettled || player.catalogueStatus !== 'ready') return
+    if (!artworkUrl) return
+    let cancelled = false
+    void preloadArtwork(artworkUrl).then(
+      () => {
+        if (!cancelled) setPreparedArtworkUrl(artworkUrl)
+      },
+      () => {
+        if (!cancelled) setPreparedArtworkUrl(artworkUrl)
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [artworkUrl])
+
+  useEffect(() => {
+    if (
+      siteReady ||
+      !sceneSettled ||
+      player.catalogueStatus !== 'ready' ||
+      (artworkUrl && preparedArtworkUrl !== artworkUrl)
+    )
+      return
+    logPerformance('PAGE_REVEAL_STARTED', {
+      sceneReady: sceneSettled,
+      catalogueReady: true,
+      artworkReady: true,
+    })
     setLoadingProgress(1)
     setSiteReady(true)
-    const timer = window.setTimeout(() => setLoaderRemoved(true), 700)
-    return () => window.clearTimeout(timer)
-  }, [player.catalogueStatus, sceneSettled])
+  }, [artworkUrl, player.catalogueStatus, preparedArtworkUrl, sceneSettled, siteReady])
 
-  const settleScene = useCallback(() => setSceneSettled(true), [])
+  useEffect(() => {
+    if (!siteReady || loaderRemoved) return
+    const timer = window.setTimeout(() => {
+      logPerformance('LOADING_SCREEN_REMOVED')
+      setLoaderRemoved(true)
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [loaderRemoved, siteReady])
+
+  const settleScene = useCallback(() => {
+    logPerformance('SCENE_READY')
+    setSceneSettled(true)
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement

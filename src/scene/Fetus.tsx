@@ -15,6 +15,7 @@ import modelUrl from '../../models/fetus/source/scene.fbx?url'
 import type { SceneConfig } from '../config/scene'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { readBassLevel, smoothBassLevel } from '../audio/bass'
+import { logPerformance } from '../utils/performanceLogger'
 
 export default function Fetus({ config, onReady }: { config: SceneConfig; onReady: () => void }) {
   const original = useLoader(FetusLoader, modelUrl)
@@ -25,6 +26,7 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     [analyser],
   )
   const { normalized, material, geometries } = useMemo(() => {
+    const startedAt = performance.now()
     const object = clone(original)
     const geometries: Mesh['geometry'][] = []
     const material = new MeshBasicMaterial({
@@ -52,6 +54,14 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     const normalized = new Group()
     normalized.add(object)
     normalized.scale.setScalar(scale)
+    logPerformance('FETUS_GEOMETRY_PREPARED', {
+      meshCount: geometries.length,
+      vertexCount: geometries.reduce(
+        (count, geometry) => count + geometry.getAttribute('position').count,
+        0,
+      ),
+      durationMs: Math.round(performance.now() - startedAt),
+    })
     return { normalized, material, geometries }
   }, [original])
   useFrame((state, delta) => {
@@ -90,7 +100,21 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     material.opacity = config.material.opacity
   }, [material, config.material])
   useEffect(() => {
-    onReady()
+    let cancelled = false
+    const startedAt = performance.now()
+    logPerformance('SCENE_RENDER_SETTLE_STARTED')
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        logPerformance('SCENE_READY_AFTER_RENDERED_FRAMES', {
+          durationMs: Math.round(performance.now() - startedAt),
+        })
+        onReady()
+      })
+    })
+    return () => {
+      cancelled = true
+    }
   }, [onReady])
   // Cached FBX geometry is shared across route visits; this clone owns its geometry and material.
   useEffect(

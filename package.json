@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "format": "prettier --write src tests scripts *.ts *.js package.json tsconfig.json README.md index.html",
     "check:production": "node scripts/check-production.mjs",
+    "waveforms:upload": "node scripts/generate-waveform-sidecars.mjs",
     "capture": "node scripts/preview.mjs --write-still"
   },
   "dependencies": {
