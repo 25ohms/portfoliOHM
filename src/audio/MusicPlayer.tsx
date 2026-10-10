@@ -67,6 +67,7 @@ type PlayerState = {
   playing: boolean
   duration: number
   position: number
+  getCurrentTime: () => number
   artworkAccent: string | null
   setArtworkAccent: (color: string | null) => void
   selectProject: (id: string) => void
@@ -200,6 +201,7 @@ async function fetchCatalogue(signal: AbortSignal) {
 
 export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const audio = useRef<HTMLAudioElement>(null)
+  const getCurrentTime = useCallback(() => audio.current?.currentTime ?? 0, [])
   const playingRef = useRef(false)
   const autoplayOnSourceChange = useRef(false)
   const catalogueRequest = useRef(0)
@@ -470,6 +472,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     playing,
     duration,
     position,
+    getCurrentTime,
     artworkAccent,
     setArtworkAccent,
     selectProject,

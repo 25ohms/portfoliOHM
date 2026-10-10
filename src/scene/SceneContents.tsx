@@ -8,6 +8,8 @@ import Stars from './Stars'
 import Nebula from './Nebula'
 import PalettePass from './PalettePass'
 import { cameraDistance } from './math'
+import Enterprise from './Enterprise'
+import { useMusicPlayer } from '../audio/MusicPlayer'
 
 export interface RuntimeScene {
   pose: MutableRefObject<Vec3>
@@ -35,6 +37,9 @@ export default function SceneContents({
   onSlow: () => void
 }) {
   const group = useRef<Group>(null)
+  const { currentTrack, playing } = useMusicPlayer()
+  const showEnterprise =
+    playing && currentTrack?.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === 'finalfrontier'
   const layoutTarget = useRef({ x: config.model.position[0], scale: config.model.scale })
   const { camera, size, invalidate } = useThree()
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
@@ -156,6 +161,11 @@ export default function SceneContents({
           </>
         </Suspense>
       </group>
+      {showEnterprise && (
+        <Suspense fallback={null}>
+          <Enterprise anchor={group} />
+        </Suspense>
+      )}
       <PalettePass config={config} resolution={resolution} />
     </>
   )

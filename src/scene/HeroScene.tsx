@@ -234,7 +234,7 @@ export default function HeroScene({
             <Canvas
               dpr={[1, config.quality.maxDpr]}
               frameloop={running ? 'always' : 'demand'}
-              camera={{ position: [0, 0, 5], near: 0.01, far: 80, fov: config.camera.fov }}
+              camera={{ position: [0, 0, 5], near: 0.01, far: 1200, fov: config.camera.fov }}
               gl={{
                 antialias: false,
                 alpha: false,
