@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import AudioCard from './cards/AudioCard'
-import ShowsCard from './cards/ShowsCard'
+import ShowsCard, { startShowsPreload } from './cards/ShowsCard'
 import { MusicPlayerProvider, useMusicPlayer } from './audio/MusicPlayer'
 import NowPlayingBar from './audio/NowPlayingBar'
 import LoadingScreen from './components/LoadingScreen'
@@ -44,6 +44,8 @@ function PortfolioExperience() {
       setSelected((current) => (current + step + dialItems.length) % dialItems.length),
     [],
   )
+
+  useEffect(() => startShowsPreload(), [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

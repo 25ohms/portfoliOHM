@@ -1123,6 +1123,26 @@ button {
   letter-spacing: 0.02em;
   overflow-wrap: anywhere;
 }
+.show-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.show-row.is-today .show-info h4 {
+  color: var(--accent);
+  text-shadow: 0 0 5px var(--accent), 0 0 12px var(--accent), 0 0 28px var(--card-glow);
+}
+.today-tag {
+  max-height: none;
+  padding: 4px 6px;
+  border-right: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 8px;
+  writing-mode: horizontal-tb;
+  box-shadow: 0 0 14px var(--card-glow);
+  white-space: nowrap;
+}
 .show-info p {
   margin: 4px 0 0;
   color: var(--muted);
