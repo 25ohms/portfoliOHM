@@ -66,7 +66,10 @@ function PortfolioExperience() {
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         move(event.key === 'ArrowDown' ? 1 : -1)
-      } else if (event.key === 'Escape') setSelected(0)
+      } else if (event.key === 'Escape') {
+        if (target.closest('[role="dialog"]')) return
+        setSelected(0)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -183,14 +186,9 @@ function PortfolioExperience() {
           </Suspense>
         </div>
         <aside className="dial-rail">
-          <a
-            className="wordmark"
-            href="#home"
-            onClick={() => setSelected(0)}
-            aria-label="25ohms home"
-          >
+          <div className="wordmark">
             25<span>ohms</span>
-          </a>
+          </div>
           <div
             className="dial"
             id="dial"

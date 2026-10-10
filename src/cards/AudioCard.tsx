@@ -7,13 +7,6 @@ function formatTime(milliseconds: number) {
   return `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, '0')}`
 }
 
-function titleCase(title: string) {
-  const letters = title.replace(/[^a-z]/gi, '')
-  if (letters && letters === letters.toLowerCase()) return 'lowercase'
-  if (letters && letters === letters.toUpperCase()) return 'uppercase'
-  return 'mixed'
-}
-
 export default function AudioCard() {
   const player = useMusicPlayer()
   const { selectedProjectId, setArtworkAccent } = player
@@ -180,7 +173,7 @@ export default function AudioCard() {
               ref={nowPlayingTitleElement}
               className={`now-playing-title${titleOverflows ? ' is-overflowing' : ''}`}
             >
-              <strong className={`is-${titleCase(trackTitle)}`}>
+              <strong>
                 <span ref={nowPlayingTextElement}>{trackTitle}</span>
                 {titleOverflows && <span aria-hidden="true">{trackTitle}</span>}
               </strong>

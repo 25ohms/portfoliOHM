@@ -15,7 +15,7 @@ Open the local URL printed by Vite. `npm run build` creates the static site in `
 
 In development, `[25ohms perf]` console logs report startup timings and frame drops. Toggle them with `window.__25ohmsPerfLogger.disable()` or `.enable()`; each reloads the page.
 
-The app uses React and Three.js with React Three Fiber; Leva supplies development scene controls, and Space Mono is bundled locally. Vite, TypeScript, and ESLint support development and builds; Vitest, Playwright, and Prettier provide tests and formatting. Playwright browsers are installed separately with `npx playwright install chromium firefox webkit` when running browser tests.
+The app uses React and Three.js with React Three Fiber; Leva supplies development scene controls. Space Mono and Michroma are bundled locally. Vite, TypeScript, and ESLint support development and builds; Vitest, Playwright, and Prettier provide tests and formatting. Playwright browsers are installed separately with `npx playwright install chromium firefox webkit` when running browser tests.
 
 The music catalogue and audio files are served from a public Cloudflare R2 bucket. Local development needs internet access to that bucket, and the bucket must allow browser CORS requests for audio and waveform loading. `.env` is ignored by Git. Vite injects `BUCKET_URL` into the client bundle for browser requests, so this keeps the URL out of the repository but does not hide it from site visitors. Do not put credentials or private keys in this variable. If the bucket must be private, serve the audio through a backend or signed URLs instead of exposing a direct bucket URL.
 
@@ -89,7 +89,7 @@ reference/
 
 `dist/`, `node_modules/`, and browser/test outputs are generated or installed locally and can be recreated. `npm run clean` removes generated output.
 
-The 2K12 display font is served from `public/fonts/the-2k12.ttf`. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order comes from `music/indexing.txt`; each project's `tracklist.txt` lists its WAV files. Generate interval-peak waveform sidecars and upload each beside its WAV with `npm run waveforms:upload` (requires Wrangler access to the R2 bucket).
+The 2K12 is the primary typeface and is served from `public/fonts/the-2k12.ttf` in production. The static sidebar wordmark and secondary content use Michroma. Menu dial labels and page headings display in uppercase; “between” and “and” stay lowercase, while “MAN” and “MACHINE” have a broad accent glow. The two-line home headline uses tight row spacing. Album sidebar labels preserve catalogue casing. Space Mono is reserved for small utility labels, event details, and promoter credits. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order comes from `music/indexing.txt`; each project's `tracklist.txt` lists its WAV files. Generate interval-peak waveform sidecars and upload each beside its WAV with `npm run waveforms:upload` (requires Wrangler access to the R2 bucket).
 
 Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu.
 
