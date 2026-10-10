@@ -16,10 +16,12 @@ import type { SceneConfig } from '../config/scene'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { readBassLevel, smoothBassLevel } from '../audio/bass'
 import { logPerformance } from '../utils/performanceLogger'
+import { displacementMultiplierAt, isFinalFrontierTrack } from './sceneTimeline'
 
 export default function Fetus({ config, onReady }: { config: SceneConfig; onReady: () => void }) {
   const original = useLoader(FetusLoader, modelUrl)
-  const { analyser, playing } = useMusicPlayer()
+  const { analyser, playing, currentTrack, getCurrentTime } = useMusicPlayer()
+  const timelineEnabled = isFinalFrontierTrack(currentTrack?.title)
   const bassLevel = useRef(0)
   const audioData = useMemo(
     () => (analyser ? new Uint8Array(analyser.frequencyBinCount) : null),
@@ -70,6 +72,7 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     const strength = bassLevel.current
     if (strength === 0) return
     const time = state.clock.elapsedTime
+    const timelineMultiplier = timelineEnabled ? displacementMultiplierAt(getCurrentTime()) : 1
     for (const geometry of geometries) {
       const position = geometry.getAttribute('position')
       const base = geometry.userData.basePosition as Float32Array | undefined
@@ -77,7 +80,7 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
         geometry.userData.basePosition = new Float32Array(position.array as ArrayLike<number>)
       }
       const originalPositions = geometry.userData.basePosition as Float32Array
-      const amount = (0.008 * strength) / normalized.scale.x
+      const amount = ((0.008 * strength) / normalized.scale.x) * timelineMultiplier
       for (let index = 0; index < position.count; index++) {
         const offset = index * 3
         const x = originalPositions[offset]

@@ -11,6 +11,11 @@ import { cameraDistance } from './math'
 import Enterprise from './Enterprise'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { recordSceneFrame } from '../utils/performanceLogger'
+import { ENGINE_WARMUP_START, TAXI_START, isFinalFrontierTrack } from './sceneTimeline'
+
+const TAXI_SUBJECT_SCALE = 4.5
+const TAXI_SUBJECT_Y_OFFSET = 2.5
+const TAXI_SUBJECT_X_ROTATION = MathUtils.degToRad(-30)
 
 export interface RuntimeScene {
   pose: MutableRefObject<Vec3>
@@ -51,13 +56,10 @@ export default function SceneContents({
   debugObjects: MutableRefObject<SceneDebugObjects>
 }) {
   const group = useRef<Group>(null)
-  const { currentTrack, playing } = useMusicPlayer()
-  const showEnterprise =
-    playing &&
-    currentTrack?.title
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '') === 'finalfrontier'
+  const subjectGroup = useRef<Group>(null)
+  const { currentTrack, playing, getCurrentTime } = useMusicPlayer()
+  const isFinalFrontier = isFinalFrontierTrack(currentTrack?.title)
+  const showEnterprise = playing && isFinalFrontier
   const layoutTarget = useRef({ x: config.model.position[0], scale: config.model.scale })
   const { camera, size, invalidate } = useThree()
   const projectionRaycaster = useRef(new Raycaster())
@@ -213,6 +215,14 @@ export default function SceneContents({
         MathUtils.lerp(group.current.scale.x, layoutTarget.current.scale, smoothing),
       )
     }
+    if (subjectGroup.current) {
+      const time = playing && showEnterprise ? getCurrentTime() : -1
+      const taxiProgress = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
+      const taxiScale = 1 + (TAXI_SUBJECT_SCALE - 1) * taxiProgress
+      subjectGroup.current.scale.setScalar(taxiScale)
+      subjectGroup.current.position.y = -TAXI_SUBJECT_Y_OFFSET * taxiProgress
+      subjectGroup.current.rotation.x = TAXI_SUBJECT_X_ROTATION * taxiProgress
+    }
     if (running && !samples.current.reported) {
       const s = samples.current
       s.warmup += delta
@@ -236,14 +246,16 @@ export default function SceneContents({
       <Nebula />
       <Stars config={config.stars} />
       <group ref={group} position={config.model.position} scale={config.model.scale}>
-        <Suspense fallback={null}>
-          <>
-            <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
-              <Logo config={config} />
-            </group>
-            <Fetus config={config} onReady={onReady} />
-          </>
-        </Suspense>
+        <group ref={subjectGroup}>
+          <Suspense fallback={null}>
+            <>
+              <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
+                <Logo config={config} timelineEnabled={isFinalFrontier} />
+              </group>
+              <Fetus config={config} onReady={onReady} />
+            </>
+          </Suspense>
+        </group>
       </group>
       {showEnterprise && (
         <Suspense fallback={null}>

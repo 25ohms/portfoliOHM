@@ -17,14 +17,18 @@ import {
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import type { SceneDebugObjects } from './SceneContents'
+import {
+  APPROACH_START,
+  ENGINE_WARMUP_START,
+  TAXI_START,
+  TAXI_FLARE_FADE_DURATION,
+  WARP_DURATION,
+  WARP_START,
+  WARP_TRAIL_FADE,
+  WARMUP_FLARE_LEAD,
+} from './sceneTimeline'
 import enterpriseUrl from '../../models/enterprise/uss-enterprise.obj?url'
 
-const APPROACH_START = 22
-const TAXI_START = 70
-const ENGINE_WARMUP_START = 87
-const WARP_START = 93
-const WARP_DURATION = 0.4
-const WARP_TRAIL_FADE = 1.6
 const WARP_STRETCH = 150
 const WARP_TAIL_LENGTH = 90
 const WARP_DISTANCE = 1000
@@ -500,7 +504,7 @@ export default function Enterprise({
     const warmupPulse = 0.78 + (0.22 * (Math.sin(clock.elapsedTime * 10) + 1)) / 2
     const approachFlareRamp =
       MathUtils.smoothstep(time, APPROACH_START, TAXI_START) *
-      (1 - MathUtils.smoothstep(time, TAXI_START, TAXI_START + 0.4))
+      (1 - MathUtils.smoothstep(time, TAXI_START, TAXI_START + TAXI_FLARE_FADE_DURATION))
     const approachCoreGlow = approachFlareRamp * warmupPulse * 0.52
     const coreGlow = approachCoreGlow + warmup ** 1.6 * warmupPulse * 2.8
     if (engineCore.current) {
@@ -512,7 +516,11 @@ export default function Enterprise({
     for (const core of engineCoreFlames.current) {
       if (core) core.scale.setScalar(coreSphereScale)
     }
-    const warmupFlareRamp = MathUtils.smoothstep(time, ENGINE_WARMUP_START + 0.5, WARP_START)
+    const warmupFlareRamp = MathUtils.smoothstep(
+      time,
+      ENGINE_WARMUP_START + WARMUP_FLARE_LEAD,
+      WARP_START,
+    )
     const flareIntensity = approachFlareRamp * 0.3 + warmupFlareRamp ** 1.5 * 1.8
     engineFlareMaterial.uniforms.uIntensity.value = flareIntensity
     const flareSize = 0.025 + approachFlareRamp * 0.04 + warmupFlareRamp * 0.2
