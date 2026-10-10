@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Group, MathUtils, PerspectiveCamera } from 'three'
+import { Group, MathUtils, PerspectiveCamera, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import type { SceneConfig, Vec3 } from '../config/scene'
 import Fetus from './Fetus'
 import Logo from './Logo'
@@ -18,6 +18,15 @@ export interface RuntimeScene {
   dragging: MutableRefObject<boolean>
 }
 
+export type CameraView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'xz'
+export interface SceneDebugObjects {
+  baby: Group | null
+  enterprise: Group | null
+  enterpriseDirection: Vector3 | null
+  cursorNdc: { x: number; y: number } | null
+  cursorProjection: { x: number; y: number; z: number } | null
+}
+
 export default function SceneContents({
   config,
   runtime,
@@ -27,6 +36,8 @@ export default function SceneContents({
   resolution,
   onReady,
   onSlow,
+  cameraView,
+  debugObjects,
 }: {
   config: SceneConfig
   runtime: RuntimeScene
@@ -36,6 +47,8 @@ export default function SceneContents({
   resolution: number
   onReady: () => void
   onSlow: () => void
+  cameraView: CameraView
+  debugObjects: MutableRefObject<SceneDebugObjects>
 }) {
   const group = useRef<Group>(null)
   const { currentTrack, playing } = useMusicPlayer()
@@ -47,6 +60,11 @@ export default function SceneContents({
       .replace(/[^a-z0-9]/g, '') === 'finalfrontier'
   const layoutTarget = useRef({ x: config.model.position[0], scale: config.model.scale })
   const { camera, size, invalidate } = useThree()
+  const projectionRaycaster = useRef(new Raycaster())
+  const projectionPlane = useRef(new Plane())
+  const projectionHit = useRef(new Vector3())
+  const projectionNormal = useRef(new Vector3())
+  const projectionNdc = useRef(new Vector2())
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
   useEffect(() => {
     runtime.invalidate.current = invalidate
@@ -57,15 +75,42 @@ export default function SceneContents({
   useEffect(() => {
     const perspective = camera as PerspectiveCamera
     perspective.fov = config.camera.fov
-    perspective.position.set(
-      0,
-      0,
-      cameraDistance(size.width / size.height, config.camera.fov, 1.12, config.camera.padding),
+    const distance = cameraDistance(
+      size.width / size.height,
+      config.camera.fov,
+      1.12,
+      config.camera.padding,
     )
+    perspective.up.set(0, 1, 0)
+    switch (cameraView) {
+      case 'back':
+        perspective.position.set(0, 0, -distance)
+        break
+      case 'left':
+        perspective.position.set(-distance, 0, 0)
+        break
+      case 'right':
+        perspective.position.set(distance, 0, 0)
+        break
+      case 'top':
+        perspective.position.set(0, distance, 0)
+        perspective.up.set(0, 0, -1)
+        break
+      case 'bottom':
+        perspective.position.set(0, -distance, 0)
+        perspective.up.set(0, 0, 1)
+        break
+      case 'xz':
+        perspective.position.set(0, -distance, 0)
+        perspective.up.set(0, 0, 1)
+        break
+      default:
+        perspective.position.set(0, 0, distance)
+    }
     perspective.lookAt(0, 0, 0)
     perspective.updateProjectionMatrix()
     invalidate()
-  }, [camera, config.camera, size, invalidate])
+  }, [camera, cameraView, config.camera, size, invalidate])
   useEffect(() => {
     let offsetX = 0
     let scale = config.model.scale
@@ -105,11 +150,48 @@ export default function SceneContents({
   ])
   useFrame((_, delta) => {
     recordSceneFrame(delta * 1000)
+    const cursorNdc = import.meta.env.DEV ? debugObjects.current.cursorNdc : null
+    if (cursorNdc && group.current) {
+      const baby = group.current.position
+      let planeOffset: number
+      if (cameraView === 'front' || cameraView === 'back') {
+        projectionNormal.current.set(0, 0, 1)
+        planeOffset = -baby.z
+      } else if (cameraView === 'left' || cameraView === 'right') {
+        projectionNormal.current.set(1, 0, 0)
+        planeOffset = -baby.x
+      } else {
+        projectionNormal.current.set(0, 1, 0)
+        planeOffset = -baby.y
+      }
+      projectionPlane.current.set(projectionNormal.current, planeOffset)
+      projectionNdc.current.set(cursorNdc.x, cursorNdc.y)
+      projectionRaycaster.current.setFromCamera(projectionNdc.current, camera)
+      const hit = projectionRaycaster.current.ray.intersectPlane(
+        projectionPlane.current,
+        projectionHit.current,
+      )
+      if (hit) {
+        const previous = debugObjects.current.cursorProjection
+        if (previous) {
+          previous.x = hit.x
+          previous.y = hit.y
+          previous.z = hit.z
+        } else {
+          debugObjects.current.cursorProjection = { x: hit.x, y: hit.y, z: hit.z }
+        }
+      } else {
+        debugObjects.current.cursorProjection = null
+      }
+    } else {
+      debugObjects.current.cursorProjection = null
+    }
     if (running && rotationEnabled && !runtime.dragging.current) {
       runtime.pose.current[1] =
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
     }
     if (group.current) {
+      debugObjects.current.baby = group.current
       group.current.rotation.set(...runtime.pose.current)
       const smoothing = 1 - Math.exp(-Math.min(delta, 0.05) * 8)
       group.current.position.x = MathUtils.lerp(
@@ -165,7 +247,7 @@ export default function SceneContents({
       </group>
       {showEnterprise && (
         <Suspense fallback={null}>
-          <Enterprise anchor={group} />
+          <Enterprise anchor={group} debugObjects={debugObjects} />
         </Suspense>
       )}
       <PalettePass config={config} resolution={resolution} />

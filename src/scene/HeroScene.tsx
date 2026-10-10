@@ -9,6 +9,7 @@ import {
   useState,
   type ErrorInfo,
   type KeyboardEvent,
+  type MutableRefObject,
   type PointerEvent,
   type ReactNode,
 } from 'react'
@@ -23,9 +24,10 @@ import {
   type SceneConfig,
   type Vec3,
 } from '../config/scene'
-import SceneContents from './SceneContents'
+import SceneContents, { type CameraView, type SceneDebugObjects } from './SceneContents'
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import('./SceneDevPanel')) : null
+const SHOW_SCENE_OBJECT_MENU = false
 
 function saveDraft(config: SceneConfig) {
   if (!import.meta.env.DEV) return
@@ -70,6 +72,94 @@ class SceneErrorBoundary extends Component<
   }
 }
 
+const CAMERA_VIEWS: { id: CameraView; label: string }[] = [
+  { id: 'front', label: 'FRONT' },
+  { id: 'back', label: 'BACK' },
+  { id: 'left', label: 'LEFT' },
+  { id: 'right', label: 'RIGHT' },
+  { id: 'top', label: 'TOP' },
+  { id: 'bottom', label: 'BOTTOM' },
+  { id: 'xz', label: 'XZ PLANE' },
+]
+
+function SceneObjectMenu({
+  cameraView,
+  onCameraView,
+  debugObjects,
+}: {
+  cameraView: CameraView
+  onCameraView: (view: CameraView) => void
+  debugObjects: MutableRefObject<SceneDebugObjects>
+}) {
+  const [positions, setPositions] = useState({ baby: '—', enterprise: '—', direction: '—', cursor: '—' })
+  const planeLabel =
+    cameraView === 'front' || cameraView === 'back'
+      ? 'XY PLANE'
+      : cameraView === 'left' || cameraView === 'right'
+        ? 'YZ PLANE'
+        : 'XZ PLANE'
+  useEffect(() => {
+    const format = (position: { x: number; y: number; z: number } | undefined) =>
+      position
+        ? `X ${position.x.toFixed(3)}   Y ${position.y.toFixed(3)}   Z ${position.z.toFixed(3)}`
+        : 'X —   Y —   Z —'
+    const timer = window.setInterval(() => {
+      const next = {
+        baby: format(debugObjects.current.baby?.position),
+        enterprise: format(debugObjects.current.enterprise?.position),
+        direction: format(debugObjects.current.enterpriseDirection ?? undefined),
+        cursor: format(debugObjects.current.cursorProjection ?? undefined),
+      }
+      setPositions((current) =>
+        current.baby === next.baby &&
+        current.enterprise === next.enterprise &&
+        current.direction === next.direction &&
+        current.cursor === next.cursor
+          ? current
+          : next,
+      )
+    }, 100)
+    return () => window.clearInterval(timer)
+  }, [debugObjects])
+
+  return (
+    <aside className="scene-object-menu" aria-label="Scene object and camera development menu">
+      <header><span>OBJECT MODE</span><span>FINAL FRONTIER</span></header>
+      <div className="scene-object-menu-section">
+        <span className="scene-object-menu-label">CAMERA VIEW</span>
+        <div className="scene-camera-views">
+          {CAMERA_VIEWS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={cameraView === id}
+              onClick={() => onCameraView(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="scene-object-menu-section">
+        <span className="scene-object-menu-label">BABY / WORLD POSITION</span>
+        <code>{positions.baby}</code>
+      </div>
+      <div className="scene-object-menu-section">
+        <span className="scene-object-menu-label">ENTERPRISE / WORLD POSITION</span>
+        <code>{positions.enterprise}</code>
+      </div>
+      <div className="scene-object-menu-section">
+        <span className="scene-object-menu-label">ENTERPRISE / FORWARD UNIT VECTOR</span>
+        <code>{positions.direction}</code>
+      </div>
+      <div className="scene-object-menu-section">
+        <span className="scene-object-menu-label">CURSOR / {planeLabel} · THROUGH BABY</span>
+        <code>{positions.cursor}</code>
+      </div>
+    </aside>
+  )
+}
+
 export default function HeroScene({
   cardOpen = false,
   onSettled,
@@ -86,6 +176,7 @@ export default function HeroScene({
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelRevision, setPanelRevision] = useState(0)
   const [rotationEnabled, setRotationEnabled] = useState(true)
+  const [cameraView, setCameraView] = useState<CameraView>('front')
   const rotationEnabledRef = useRef(rotationEnabled)
   rotationEnabledRef.current = rotationEnabled
   const [audioReleaseActive, setAudioReleaseActive] = useState(false)
@@ -96,6 +187,13 @@ export default function HeroScene({
   const dragging = useRef(false)
   const pointer = useRef<{ id: number; x: number; y: number } | null>(null)
   const runtime = useMemo(() => ({ pose, invalidate, dragging }), [])
+  const debugObjects = useRef<SceneDebugObjects>({
+    baby: null,
+    enterprise: null,
+    enterpriseDirection: null,
+    cursorNdc: null,
+    cursorProjection: null,
+  })
   const handleReady = useCallback(() => {
     setReady(true)
     onSettled()
@@ -168,6 +266,20 @@ export default function HeroScene({
   useEffect(() => {
     saveDraft(config)
   }, [config])
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const updateProjectionCursor = (event: globalThis.PointerEvent) => {
+      const bounds = region.current?.getBoundingClientRect()
+      if (!bounds || bounds.width === 0 || bounds.height === 0) return
+      debugObjects.current.cursorNdc = {
+        x: ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        y: 1 - ((event.clientY - bounds.top) / bounds.height) * 2,
+      }
+      invalidate.current()
+    }
+    window.addEventListener('pointermove', updateProjectionCursor)
+    return () => window.removeEventListener('pointermove', updateProjectionCursor)
+  }, [])
   useEffect(() => {
     if (!import.meta.env.DEV) return
     const save = () => {
@@ -277,6 +389,8 @@ export default function HeroScene({
                 resolution={config.quality.resolution * quality}
                 onReady={handleReady}
                 onSlow={handleSlow}
+                cameraView={cameraView}
+                debugObjects={debugObjects}
               />
             </Canvas>
           </SceneErrorBoundary>
@@ -286,6 +400,13 @@ export default function HeroScene({
         <span>VESSEL_001</span>
         <span>SYS / OHMEGA</span>
       </div>
+      {import.meta.env.DEV && SHOW_SCENE_OBJECT_MENU && (
+        <SceneObjectMenu
+          cameraView={cameraView}
+          onCameraView={setCameraView}
+          debugObjects={debugObjects}
+        />
+      )}
       <div className="scene-controls">
         <span id="scene-instructions">
           {failed ? (
