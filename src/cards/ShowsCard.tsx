@@ -3,6 +3,7 @@ import { imageAccentColor, type RGBColor } from '../utils/color'
 
 const ARTIST_SLUG = '25ohms'
 const PAGE_SIZE = 50
+const SHOWS_POLL_INTERVAL = 60 * 60 * 1000
 
 type RAEvent = {
   id: string
@@ -226,6 +227,55 @@ async function loadShows(signal: AbortSignal): Promise<Show[]> {
   return fillMissingFlyers(orderedShows, signal)
 }
 
+let cachedShows: Show[] = []
+let showsError = ''
+let showsLoaded = false
+let refreshPromise: Promise<void> | null = null
+const showsListeners = new Set<() => void>()
+
+function notifyShowsListeners() {
+  showsListeners.forEach((listener) => listener())
+}
+
+async function refreshShows(signal?: AbortSignal) {
+  if (refreshPromise) return refreshPromise
+  const controller = signal ? null : new AbortController()
+  const activeSignal = signal || controller!.signal
+  refreshPromise = loadShows(activeSignal)
+    .then((nextShows) => {
+      if (activeSignal.aborted) return
+      const changed = JSON.stringify(nextShows) !== JSON.stringify(cachedShows)
+      const firstLoad = !showsLoaded
+      showsError = ''
+      showsLoaded = true
+      if (changed) {
+        cachedShows = nextShows
+      }
+      if (changed || firstLoad) notifyShowsListeners()
+    })
+    .catch((reason: unknown) => {
+      if (activeSignal.aborted) return
+      showsError = reason instanceof Error ? reason.message : 'Could not load Resident Advisor events.'
+      showsLoaded = true
+      notifyShowsListeners()
+    })
+    .finally(() => {
+      refreshPromise = null
+    })
+  return refreshPromise
+}
+
+export function startShowsPreload() {
+  void refreshShows()
+  const interval = window.setInterval(() => void refreshShows(), SHOWS_POLL_INTERVAL)
+  return () => window.clearInterval(interval)
+}
+
+function subscribeToShows(listener: () => void) {
+  showsListeners.add(listener)
+  return () => showsListeners.delete(listener)
+}
+
 function formatShowDate(date: string) {
   const parsed = new Date(date)
   if (Number.isNaN(parsed.getTime())) return date
@@ -234,26 +284,25 @@ function formatShowDate(date: string) {
   }).format(parsed)
 }
 
+function isToday(date: string) {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return date.slice(0, 10) === today
+}
+
 export default function ShowsCard({ onAccentChange }: { onAccentChange: (color: string | null) => void }) {
-  const [shows, setShows] = useState<Show[]>([])
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [error, setError] = useState('')
+  const [shows, setShows] = useState(cachedShows)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(showsLoaded ? 'ready' : 'loading')
+  const [error, setError] = useState(showsError)
 
   useEffect(() => {
-    const controller = new AbortController()
-    setStatus('loading')
-    void loadShows(controller.signal)
-      .then((events) => {
-        if (controller.signal.aborted) return
-        setShows(events)
-        setStatus('ready')
-      })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return
-        setError(reason instanceof Error ? reason.message : 'Could not load Resident Advisor events.')
-        setStatus('error')
-      })
-    return () => controller.abort()
+    const sync = () => {
+      setShows(cachedShows)
+      setError(showsError)
+      setStatus(showsLoaded ? (showsError && !cachedShows.length ? 'error' : 'ready') : 'loading')
+    }
+    sync()
+    return subscribeToShows(sync)
   }, [])
 
   useEffect(() => {
@@ -313,8 +362,9 @@ function ShowSection({ title, shows, upcoming = false }: { title: string; shows:
         <p className="show-empty">{upcoming ? 'No upcoming shows announced.' : 'No past shows listed.'}</p>
       ) : (
         <ol className="show-list">
-          {shows.map((show) => (
-            <li className="show-row" key={show.id}>
+          {shows.map((show) => {
+            const happeningToday = isToday(show.date)
+            return <li className={`show-row${happeningToday ? ' is-today' : ''}`} key={show.id}>
               <div className={`show-flyer-slot${show.flyer ? '' : ' is-empty'}`}>
                 {show.flyer && (
                   <img
@@ -331,7 +381,10 @@ function ShowSection({ title, shows, upcoming = false }: { title: string; shows:
               <div className="show-info">
                 <div className="show-date">{formatShowDate(show.date)}</div>
                 <div className="show-copy">
-                  <h4>{show.title}</h4>
+                  <div className="show-title-line">
+                    <h4>{show.title}</h4>
+                    {happeningToday && <span className="catalogue-tab today-tag">TODAY</span>}
+                  </div>
                   <p>{show.venue}{show.area ? ` · ${show.area}` : ''}</p>
                   <p className="show-promoter">
                     <span className="show-promoter-label">PROMOTED BY</span>{' '}
@@ -354,7 +407,7 @@ function ShowSection({ title, shows, upcoming = false }: { title: string; shows:
                 </a>
               )}
             </li>
-          ))}
+          })}
         </ol>
       )}
     </section>
