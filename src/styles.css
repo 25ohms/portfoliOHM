@@ -10,7 +10,8 @@
 }
 :root {
   /* Change these tokens to retune the type and CRT palette in one place. */
-  --font-display: 'The 2K12', 'DM Sans Variable', sans-serif;
+  --font-display: 'The 2K12', var(--font-secondary), sans-serif;
+  --font-secondary: 'Michroma', sans-serif;
   --font-ui: 'Space Mono', 'LED Dot Pixel', monospace;
   --bg: #030608;
   --ink: #d4fff3;
@@ -96,7 +97,7 @@
   font-family: 'The 2K12';
   src: url('/fonts/the-2k12.ttf') format('truetype');
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 400;
   font-display: swap;
 }
 * {
@@ -266,6 +267,68 @@ button {
 .scene-layer .scene-coordinate {
   display: none;
 }
+.scene-layer .scene-object-menu {
+  position: absolute;
+  z-index: 12;
+  top: 24px;
+  right: 24px;
+  width: min(310px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid #4a7772;
+  background: #071011eF;
+  box-shadow: 0 10px 32px #0009, inset 0 0 18px #8effdc0a;
+  color: #b8d3ce;
+  font: 9px/1.4 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+.scene-object-menu > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #29413f;
+  color: #8effdc;
+}
+.scene-object-menu > header span:last-child {
+  color: #71918c;
+}
+.scene-object-menu-section {
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
+}
+.scene-object-menu-label {
+  color: #77918d;
+  font-size: 8px;
+}
+.scene-camera-views {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.scene-camera-views button {
+  min-height: 25px;
+  padding: 3px 4px;
+  border: 1px solid #29413f;
+  background: #0c1919;
+  color: #a2b9b5;
+  font: 8px var(--font-ui);
+  letter-spacing: 0.04em;
+}
+.scene-camera-views button:hover,
+.scene-camera-views button[aria-pressed='true'] {
+  border-color: #8effdc;
+  background: #8effdc18;
+  color: #8effdc;
+}
+.scene-object-menu code {
+  color: #d1e1de;
+  font: 9px/1.5 var(--font-ui);
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+}
 .scene-layer .scene-controls {
   display: flex;
   left: auto;
@@ -281,7 +344,7 @@ button {
   bottom: 22px;
 }
 .scene-layer .dev-panel {
-  top: 24px;
+  top: 250px;
 }
 
 .dial-rail {
@@ -304,12 +367,12 @@ button {
   max-width: 100%;
   overflow: hidden;
   color: var(--accent);
-  font: 700 clamp(13px, 1.8vw, 25px)/1 var(--font-display);
+  font: 400 clamp(13px, 1.8vw, 25px)/1 'Michroma', sans-serif;
   letter-spacing: -0.09em;
   white-space: nowrap;
 }
 .wordmark span {
-  font-weight: 450;
+  font-weight: 400;
 }
 .dial {
   position: absolute;
@@ -348,6 +411,7 @@ button {
   background: none;
   color: var(--dial-idle);
   text-align: left;
+  text-transform: uppercase;
   font: 400 clamp(17px, 2vw, 30px)/1.15 var(--font-display);
   letter-spacing: -0.055em;
   opacity: 0.42;
@@ -393,10 +457,11 @@ button {
   display: grid;
   grid-template-columns: max-content max-content;
   column-gap: 0.55em;
-  row-gap: 0.14em;
+  row-gap: 0;
   margin: 0;
   color: var(--accent);
-  font: 400 calc(clamp(10px, 1vw, 13px) + 6.67px) / 1.5 var(--font-ui);
+  text-transform: uppercase;
+  font: 400 calc(clamp(10px, 1vw, 13px) + 6.67px) / 1.15 var(--font-ui);
   letter-spacing: 0.16em;
 }
 .hero-title-word,
@@ -408,9 +473,16 @@ button {
 }
 .hero-title-word {
   justify-self: end;
+  font-family: var(--font-secondary);
+  text-transform: lowercase;
 }
 .hero-title-emphasis {
-  font-family: 'The 2K12', var(--font-display);
+  font-family: var(--font-display);
+  font-size: 1.2em;
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--accent) 78%, transparent),
+    0 0 24px color-mix(in srgb, var(--accent) 52%, transparent),
+    0 0 46px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 .hero-title-man {
   letter-spacing: 0;
@@ -454,9 +526,8 @@ button {
   border-right: 0;
   background: #030807ed;
   color: var(--muted);
-  font: 9px/1.25 var(--font-ui);
+  font: 9px/1.25 var(--font-secondary);
   letter-spacing: 0.1em;
-  text-transform: uppercase;
   writing-mode: vertical-rl;
   box-shadow: 0 0 14px var(--card-glow);
   transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
@@ -544,7 +615,7 @@ button {
 .now-playing-bar-track strong {
   overflow: hidden;
   color: var(--ink);
-  font: 12px/1.2 var(--font-display);
+  font: 12px/1.2 var(--font-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -612,6 +683,7 @@ button {
 .card-heading h2 {
   margin: 6px 0 0;
   color: var(--accent);
+  text-transform: uppercase;
   font: 500 clamp(30px, 3.4vw, 48px)/0.98 var(--font-display);
   letter-spacing: -0.07em;
 }
@@ -629,7 +701,7 @@ button {
   flex: 0 0 auto;
 }
 .now-playing strong {
-  font: 500 clamp(17px, 2vw, 24px)/1.2 var(--font-display);
+  font: 400 clamp(17px, 2vw, 24px)/1.2 var(--font-secondary);
 }
 .now-playing-title {
   min-width: 0;
@@ -650,13 +722,6 @@ button {
   to {
     transform: translateX(calc(-50% - 2em));
   }
-}
-.now-playing strong.is-lowercase {
-  font-family: var(--font-ui);
-}
-.now-playing strong.is-uppercase,
-.now-playing strong.is-mixed {
-  font-family: var(--font-display);
 }
 .track-artwork {
   width: 100%;
@@ -897,7 +962,7 @@ button {
 .track-row > .track-row-title {
   overflow: hidden;
   color: var(--ink);
-  font: 12px/1.35 var(--font-ui);
+  font: 12px/1.35 var(--font-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1026,7 +1091,7 @@ button {
 }
 .show-info {
   min-width: 0;
-  font-family: var(--font-ui);
+  font-family: var(--font-secondary);
 }
 .show-flyer-slot {
   width: 82px;
@@ -1054,7 +1119,7 @@ button {
 .show-info h4 {
   margin: 0;
   color: var(--ink);
-  font: 700 16px/1.45 var(--font-ui);
+  font: 400 16px/1.45 var(--font-secondary);
   letter-spacing: 0.02em;
   overflow-wrap: anywhere;
 }
@@ -1066,6 +1131,7 @@ button {
 }
 .show-info .show-promoter {
   color: var(--muted);
+  font-family: var(--font-ui);
   font-size: 10px;
   line-height: 1.5;
   letter-spacing: 0.07em;
@@ -1229,7 +1295,7 @@ button {
     font-size: 7px;
   }
   .scene-layer .dev-panel {
-    top: 12px;
+    top: 230px;
     right: 12px;
   }
   .scene-layer .scene-controls {

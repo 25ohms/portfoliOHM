@@ -1,6 +1,10 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { ShaderMaterial } from 'three'
+import { useMusicPlayer } from '../audio/MusicPlayer'
+import { readBassLevel } from '../audio/bass'
+
+const SPEED_TRANSITION_RATE = 4.5
 
 const vertexShader = `
   varying vec2 vUv;
@@ -34,9 +38,20 @@ const fragmentShader = `
 
 export default function Nebula() {
   const material = useRef<ShaderMaterial>(null)
+  const bassLevel = useRef(0)
+  const { analyser, playing } = useMusicPlayer()
+  const frequencyData = useMemo(
+    () => (analyser ? new Uint8Array(analyser.frequencyBinCount) : null),
+    [analyser],
+  )
   useFrame((_, delta) => {
+    const target = playing && analyser && frequencyData ? readBassLevel(analyser, frequencyData) : 0
+    bassLevel.current +=
+      (target - bassLevel.current) *
+      (1 - Math.exp(-Math.min(delta, 0.05) * SPEED_TRANSITION_RATE))
     if (material.current) {
-      material.current.uniforms.uTime.value += Math.min(delta, 0.05)
+      material.current.uniforms.uTime.value +=
+        Math.min(delta, 0.05) * (1 + bassLevel.current * 2)
     }
   })
   return (

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useMusicPlayer } from './MusicPlayer'
 import Waveform from '../cards/Waveform'
+import { logPerformance } from '../utils/performanceLogger'
+import { drawTintedArtwork, preloadArtwork } from './artworkCache'
 
 export default function NowPlayingBar({ hidden }: { hidden: boolean }) {
   const player = useMusicPlayer()
@@ -23,54 +25,29 @@ export default function NowPlayingBar({ hidden }: { hidden: boolean }) {
   useEffect(() => {
     const canvas = artworkCanvas.current
     if (!canvas || !artwork) return
-    const controller = new AbortController()
+    const startedAt = performance.now()
     setArtworkFallback(false)
-
-    const renderArtwork = async () => {
-      const response = await fetch(artwork, { mode: 'cors', signal: controller.signal })
-      if (!response.ok) throw new Error('Artwork request failed')
-      const bitmap = await createImageBitmap(await response.blob())
-      if (controller.signal.aborted) {
-        bitmap.close()
-        return
-      }
-
-      const context = canvas.getContext('2d', { willReadFrequently: true })
-      const colorContext = document.createElement('canvas').getContext('2d', {
-        willReadFrequently: true,
+    let cancelled = false
+    void preloadArtwork(artwork)
+      .then((prepared) => {
+        if (cancelled) return
+        const processingStartedAt = performance.now()
+        drawTintedArtwork(canvas, prepared, accent)
+        logPerformance('NOW_PLAYING_ARTWORK_READY', {
+          processingMs: Math.round(performance.now() - processingStartedAt),
+          totalMs: Math.round(performance.now() - startedAt),
+        })
       })
-      if (!context || !colorContext) {
-        bitmap.close()
-        throw new Error('Artwork canvas is unavailable')
-      }
-
-      const size = 80
-      canvas.width = size
-      canvas.height = size
-      context.drawImage(bitmap, 0, 0, size, size)
-      bitmap.close()
-
-      colorContext.fillStyle = accent
-      colorContext.fillRect(0, 0, 1, 1)
-      const color = colorContext.getImageData(0, 0, 1, 1).data
-      const image = context.getImageData(0, 0, size, size)
-      for (let index = 0; index < image.data.length; index += 4) {
-        const luminance =
-          (image.data[index] * 0.2126 +
-            image.data[index + 1] * 0.7152 +
-            image.data[index + 2] * 0.0722) /
-          255
-        image.data[index] = color[0] * luminance
-        image.data[index + 1] = color[1] * luminance
-        image.data[index + 2] = color[2] * luminance
-      }
-      context.putImageData(image, 0, 0)
+      .catch(() => {
+        if (cancelled) return
+        logPerformance('NOW_PLAYING_ARTWORK_FAILED', {
+          durationMs: Math.round(performance.now() - startedAt),
+        })
+        setArtworkFallback(true)
+      })
+    return () => {
+      cancelled = true
     }
-
-    void renderArtwork().catch(() => {
-      if (!controller.signal.aborted) setArtworkFallback(true)
-    })
-    return () => controller.abort()
   }, [artwork, accent])
 
   return (

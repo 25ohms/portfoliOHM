@@ -13,10 +13,12 @@
     "test:e2e": "playwright test",
     "format": "prettier --write src tests scripts *.ts *.js package.json tsconfig.json README.md index.html",
     "check:production": "node scripts/check-production.mjs",
+    "waveforms:upload": "node scripts/generate-waveform-sidecars.mjs",
     "capture": "node scripts/preview.mjs --write-still"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource/michroma": "^5.3.0",
     "@fontsource/space-mono": "^5.3.0",
     "@react-three/fiber": "^9.3.0",
     "leva": "^0.10.0",

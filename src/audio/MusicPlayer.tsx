@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { logPerformance } from '../utils/performanceLogger'
 
 const bucketUrl = import.meta.env.BUCKET_URL?.replace(/\/$/, '')
 const projectArtworkPaths: Record<string, string> = {
@@ -67,6 +68,7 @@ type PlayerState = {
   playing: boolean
   duration: number
   position: number
+  getCurrentTime: () => number
   artworkAccent: string | null
   setArtworkAccent: (color: string | null) => void
   selectProject: (id: string) => void
@@ -110,33 +112,38 @@ function parseIndex(source: string) {
   return projects
 }
 
-async function calculateWaveformPeaks(url: string, signal: AbortSignal) {
-  const response = await fetch(url, { mode: 'cors', cache: 'no-store', signal })
-  if (!response.ok) throw new Error(`Audio request failed (${response.status})`)
-  const encodedAudio = await response.arrayBuffer()
-  const context = new AudioContext()
-  try {
-    const decodedAudio = await context.decodeAudioData(encodedAudio)
-    const peakCount = 2048
-    const samplesPerPeak = Math.max(1, Math.ceil(decodedAudio.length / peakCount))
-    const peaks = new Array<number>(Math.ceil(decodedAudio.length / samplesPerPeak)).fill(0)
-    for (let channelIndex = 0; channelIndex < decodedAudio.numberOfChannels; channelIndex++) {
-      const channel = decodedAudio.getChannelData(channelIndex)
-      for (let peakIndex = 0; peakIndex < peaks.length; peakIndex++) {
-        const start = peakIndex * samplesPerPeak
-        const end = Math.min(channel.length, start + samplesPerPeak)
-        let maximum = peaks[peakIndex]
-        for (let sampleIndex = start; sampleIndex < end; sampleIndex++) {
-          maximum = Math.max(maximum, Math.abs(channel[sampleIndex]))
-        }
-        peaks[peakIndex] = maximum
-      }
-    }
-    const maximum = Math.max(...peaks, 1e-6)
-    return peaks.map((peak) => peak / maximum)
-  } finally {
-    await context.close()
+const WAVEFORM_BAR_COUNT = 128
+
+async function fetchWaveformBars(track: MusicTrack, signal: AbortSignal) {
+  const sidecarUrl = track.audioUrl.replace(/\.wav(?=$|\?)/i, '.waveform.json')
+  if (sidecarUrl === track.audioUrl) throw new Error('Track URL is not a WAV file')
+  const startedAt = performance.now()
+  logPerformance('WAVEFORM_SIDECAR_REQUEST_STARTED', { trackId: track.id })
+  const response = await fetch(sidecarUrl, { mode: 'cors', cache: 'no-cache', signal })
+  if (!response.ok) {
+    logPerformance('WAVEFORM_SIDECAR_HTTP_ERROR', {
+      trackId: track.id,
+      status: response.status,
+      path: new URL(sidecarUrl).pathname,
+    })
+    throw new Error(`Waveform sidecar request failed (${response.status})`)
   }
+  const payload: unknown = await response.json()
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid waveform sidecar')
+  const sidecar = payload as { version?: unknown; bars?: unknown }
+  if (
+    sidecar.version !== 1 ||
+    !Array.isArray(sidecar.bars) ||
+    sidecar.bars.length !== WAVEFORM_BAR_COUNT ||
+    !sidecar.bars.every((bar) => typeof bar === 'number' && Number.isFinite(bar) && bar >= 0 && bar <= 1)
+  )
+    throw new Error('Invalid waveform sidecar')
+  logPerformance('WAVEFORM_SIDECAR_READY', {
+    trackId: track.id,
+    barCount: sidecar.bars.length,
+    durationMs: Math.round(performance.now() - startedAt),
+  })
+  return sidecar.bars as number[]
 }
 
 async function fetchCatalogue(signal: AbortSignal) {
@@ -173,7 +180,9 @@ async function fetchCatalogue(signal: AbortSignal) {
             return {
               id: `${entry.id}-${index + 1}`,
               title: trackTitle,
-              audioUrl: publicUrl(`music/${trackAssets?.audio ?? `${entry.prefix}/${trackTitle}.wav`}`),
+              audioUrl: publicUrl(
+                `music/${trackAssets?.audio ?? `${entry.prefix}/${trackTitle}.wav`}`,
+              ),
               artworkUrl: trackAssets?.artwork
                 ? publicArtworkUrl(`music/${trackAssets.artwork}`)
                 : artworkUrl,
@@ -184,7 +193,12 @@ async function fetchCatalogue(signal: AbortSignal) {
       } catch (error) {
         if (signal.aborted) throw error
         return {
-          project: { ...entry, objectPrefix: entry.prefix, artworkUrl, tracks: [] } satisfies MusicProject,
+          project: {
+            ...entry,
+            objectPrefix: entry.prefix,
+            artworkUrl,
+            tracks: [],
+          } satisfies MusicProject,
           error: `${entry.title}: ${error instanceof Error ? error.message : 'tracklist unavailable'}`,
         }
       }
@@ -200,6 +214,7 @@ async function fetchCatalogue(signal: AbortSignal) {
 
 export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const audio = useRef<HTMLAudioElement>(null)
+  const getCurrentTime = useCallback(() => audio.current?.currentTime ?? 0, [])
   const playingRef = useRef(false)
   const autoplayOnSourceChange = useRef(false)
   const catalogueRequest = useRef(0)
@@ -226,13 +241,17 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     () => projects.find((project) => project.id === selectedProjectId)?.tracks ?? [],
     [projects, selectedProjectId],
   )
-  const trackIndex = Math.max(0, tracks.findIndex((track) => track.id === currentTrack?.id))
+  const trackIndex = Math.max(
+    0,
+    tracks.findIndex((track) => track.id === currentTrack?.id),
+  )
   const tracksRef = useRef(tracks)
   const trackIndexRef = useRef(trackIndex)
   tracksRef.current = tracks
   trackIndexRef.current = trackIndex
 
   const loadCatalogue = useCallback(() => {
+    const startedAt = performance.now()
     catalogueController.current?.abort()
     const requestId = ++catalogueRequest.current
     const controller = new AbortController()
@@ -245,6 +264,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     setWaveformError(null)
     setCatalogueStatus('loading')
     setCatalogueError(null)
+    logPerformance('CATALOGUE_REQUEST_STARTED', { requestId })
     void fetchCatalogue(controller.signal)
       .then(({ projects: loadedProjects, errors }) => {
         if (requestId !== catalogueRequest.current) return
@@ -257,6 +277,13 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         if (requestId !== catalogueRequest.current) return
         setWaveformsReady(true)
         setCatalogueStatus('ready')
+        logPerformance('CATALOGUE_READY', {
+          requestId,
+          durationMs: Math.round(performance.now() - startedAt),
+          projectCount: loadedProjects.length,
+          trackCount: loadedProjects.reduce((count, project) => count + project.tracks.length, 0),
+          projectsWithErrors: errors.length,
+        })
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || requestId !== catalogueRequest.current) return
@@ -264,17 +291,25 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         setCatalogueError(
           error instanceof Error ? error.message : 'Unable to load the project catalogue.',
         )
+        logPerformance('CATALOGUE_FAILED', {
+          requestId,
+          durationMs: Math.round(performance.now() - startedAt),
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+        })
       })
     return () => controller.abort()
   }, [])
 
   useEffect(() => loadCatalogue(), [loadCatalogue])
 
-  useEffect(() => () => {
-    catalogueController.current?.abort()
-    waveformRequests.current.forEach((controller) => controller.abort())
-    void audioContext.current?.close()
-  }, [])
+  useEffect(
+    () => () => {
+      catalogueController.current?.abort()
+      waveformRequests.current.forEach((controller) => controller.abort())
+      void audioContext.current?.close()
+    },
+    [],
+  )
 
   useEffect(() => {
     const element = audio.current
@@ -282,9 +317,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     if (element.src === currentTrack.audioUrl) {
       if (autoplayOnSourceChange.current) {
         autoplayOnSourceChange.current = false
-        void element.play().catch(() =>
-          setPlaybackError('Playback was blocked. Press play to try again.'),
-        )
+        void element
+          .play()
+          .catch(() => setPlaybackError('Playback was blocked. Press play to try again.'))
       }
       return
     }
@@ -298,9 +333,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     element.load()
     if (autoplayOnSourceChange.current) {
       autoplayOnSourceChange.current = false
-      void element.play().catch(() =>
-        setPlaybackError('Playback was blocked. Press play to try again.'),
-      )
+      void element
+        .play()
+        .catch(() => setPlaybackError('Playback was blocked. Press play to try again.'))
     }
   }, [currentTrack])
 
@@ -360,7 +395,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         const analyserNode = context.createAnalyser()
         const gain = context.createGain()
         analyserNode.fftSize = 2048
-        analyserNode.smoothingTimeConstant = 0.7
+        analyserNode.smoothingTimeConstant = 0.15
         source.connect(analyserNode)
         analyserNode.connect(gain)
         gain.connect(context.destination)
@@ -389,14 +424,19 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController()
     waveformRequests.current.set(track.id, controller)
     setWaveformsReady(false)
-    void calculateWaveformPeaks(track.audioUrl, controller.signal)
-      .then((peaks) => {
-        waveformCache.current[track.id] = peaks
-        setWaveforms((current) => ({ ...current, [track.id]: peaks }))
+    void fetchWaveformBars(track, controller.signal)
+      .then((bars) => {
+        if (controller.signal.aborted) return
+        waveformCache.current[track.id] = bars
+        setWaveforms((current) => ({ ...current, [track.id]: bars }))
         if (waveformSelection.current === track.id) setWaveformsReady(true)
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
+        logPerformance('WAVEFORM_SIDECAR_FAILED', {
+          trackId: track.id,
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+        })
         if (waveformSelection.current === track.id) {
           setWaveformError(error instanceof Error ? error.message : 'Waveform data is unavailable.')
           setWaveformsReady(true)
@@ -409,37 +449,46 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       })
   }, [])
 
-  const selectProject = useCallback((id: string) => {
-    const project = projects.find((entry) => entry.id === id)
-    if (!project) return
-    audio.current?.pause()
-    playingRef.current = false
-    setPlaying(false)
-    setPosition(0)
-    setDuration(0)
-    setPlaybackError(null)
-    autoplayOnSourceChange.current = false
-    setSelectedProjectId(id)
-    setCurrentTrack(project.tracks[0] ?? null)
-  }, [projects])
-
-  const changeTrack = useCallback((index: number) => {
-    if (!tracks.length) return
-    const next = tracks[(index + tracks.length) % tracks.length]
-    if (!next) return
-    requestWaveform(next)
-    if (next.id === currentTrack?.id) void play()
-    else {
+  const selectProject = useCallback(
+    (id: string) => {
+      const project = projects.find((entry) => entry.id === id)
+      if (!project) return
       audio.current?.pause()
-      autoplayOnSourceChange.current = true
-      setCurrentTrack(next)
-    }
-  }, [currentTrack, play, requestWaveform, tracks])
+      playingRef.current = false
+      setPlaying(false)
+      setPosition(0)
+      setDuration(0)
+      setPlaybackError(null)
+      autoplayOnSourceChange.current = false
+      setSelectedProjectId(id)
+      setCurrentTrack(project.tracks[0] ?? null)
+    },
+    [projects],
+  )
 
-  const skipTrack = useCallback((direction: -1 | 1) => {
-    if (!tracks.length) return
-    changeTrack(trackIndex + direction)
-  }, [changeTrack, trackIndex, tracks.length])
+  const changeTrack = useCallback(
+    (index: number) => {
+      if (!tracks.length) return
+      const next = tracks[(index + tracks.length) % tracks.length]
+      if (!next) return
+      requestWaveform(next)
+      if (next.id === currentTrack?.id) void play()
+      else {
+        audio.current?.pause()
+        autoplayOnSourceChange.current = true
+        setCurrentTrack(next)
+      }
+    },
+    [currentTrack, play, requestWaveform, tracks],
+  )
+
+  const skipTrack = useCallback(
+    (direction: -1 | 1) => {
+      if (!tracks.length) return
+      changeTrack(trackIndex + direction)
+    },
+    [changeTrack, trackIndex, tracks.length],
+  )
 
   const togglePlayback = useCallback(() => {
     const element = audio.current
@@ -448,11 +497,14 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     else void play()
   }, [currentTrack, play])
 
-  const seekTo = useCallback((milliseconds: number) => {
-    const element = audio.current
-    if (!element || !Number.isFinite(milliseconds)) return
-    element.currentTime = Math.max(0, Math.min(milliseconds, duration || milliseconds)) / 1000
-  }, [duration])
+  const seekTo = useCallback(
+    (milliseconds: number) => {
+      const element = audio.current
+      if (!element || !Number.isFinite(milliseconds)) return
+      element.currentTime = Math.max(0, Math.min(milliseconds, duration || milliseconds)) / 1000
+    },
+    [duration],
+  )
 
   const state: PlayerState = {
     projects,
@@ -470,6 +522,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     playing,
     duration,
     position,
+    getCurrentTime,
     artworkAccent,
     setArtworkAccent,
     selectProject,
