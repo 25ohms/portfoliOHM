@@ -184,7 +184,11 @@ function PortfolioExperience() {
         </a>
         <div className="scene-layer">
           <Suspense fallback={null}>
-            <HeroScene cardOpen={selected > 0} onSettled={settleScene} />
+            <HeroScene
+              active={loaderRemoved}
+              cardOpen={selected > 0}
+              onSettled={settleScene}
+            />
           </Suspense>
         </div>
         <aside className="dial-rail">

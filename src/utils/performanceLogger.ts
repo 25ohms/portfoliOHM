@@ -26,6 +26,7 @@ let dropWindow: FrameDropWindow | null = null
 let sceneFrameCount = 0
 let sceneFirstFrameAt = 0
 let scenePreviousFrameAt = 0
+let lastLongAnimationFrameLogAt = -REPORT_INTERVAL_MS
 const sceneFrameIntervals: number[] = []
 
 function rounded(value: number) {
@@ -109,6 +110,8 @@ function installLongTaskObserver() {
   try {
     const observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
+        if (entry.startTime - lastLongAnimationFrameLogAt < REPORT_INTERVAL_MS) continue
+        lastLongAnimationFrameLogAt = entry.startTime
         const frame = entry as PerformanceEntry & {
           renderStart?: number
           styleAndLayoutStart?: number
@@ -203,6 +206,7 @@ function startFrameMonitor() {
   let previousFrame = 0
   let firstFrame = 0
   let expectedFrameMs = 16.7
+  let lastSevereFrameLogAt = 0
   const calibration: number[] = []
   const firstHundred: number[] = []
 
@@ -223,7 +227,8 @@ function startFrameMonitor() {
     dropWindow.count += 1
     dropWindow.missedFrames += missedFrames
     dropWindow.maxFrameMs = Math.max(dropWindow.maxFrameMs, rounded(frameMs))
-    if (frameMs >= 50) {
+    if (frameMs >= 50 && atMs - lastSevereFrameLogAt >= REPORT_INTERVAL_MS) {
+      lastSevereFrameLogAt = atMs
       emit(
         'SEVERE_FRAME_DROP',
         {

@@ -161,9 +161,11 @@ function SceneObjectMenu({
 }
 
 export default function HeroScene({
+  active = true,
   cardOpen = false,
   onSettled,
 }: {
+  active?: boolean
   cardOpen?: boolean
   onSettled: () => void
 }) {
@@ -332,6 +334,7 @@ export default function HeroScene({
   }
 
   const running =
+    active &&
     visible &&
     ready &&
     (playing || audioReleaseActive || (config.motion.speed > 0 && rotationEnabled))
@@ -428,10 +431,13 @@ export default function HeroScene({
         </span>
         {!failed && (
           <div>
-            <button aria-label="Reset camera view" onClick={() => {
-              cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
-              resetPose()
-            }}>
+            <button
+              aria-label="Reset camera view"
+              onClick={() => {
+                cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
+                resetPose()
+              }}
+            >
               ↺
             </button>
           </div>

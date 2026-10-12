@@ -25,7 +25,7 @@ const vertexShader = `
     float spawn = smoothstep(aSparkle - 0.08, aSparkle + 0.08, 0.72 + uBass * 0.28);
     vGlow = (0.12 + aSparkle * 0.88) * pulse * aBrightness * uBrightness * spawn * (1.0 + uBass * 0.65);
     gl_Position = projectionMatrix * viewPosition;
-    gl_PointSize = uSize * aSize * (1.0 + vTwinkle * 2.5) * (30.0 / max(1.0, -viewPosition.z));
+    gl_PointSize = uSize * aSize * (1.0 + vTwinkle * 2.5) * (70.0 / max(1.0, -viewPosition.z));
   }
 `
 
@@ -56,17 +56,18 @@ export default function Stars({ config }: { config: SceneConfig['stars'] }) {
     [analyser],
   )
   const { positions, phases, sparkles, sizes, brightnesses, twinkleRates } = useMemo(() => {
+    const particleCount = config.count * 8
     const random = seededRandom(config.seed)
-    const positions = new Float32Array(config.count * 3)
-    const phases = new Float32Array(config.count)
-    const sparkles = new Float32Array(config.count)
-    const sizes = new Float32Array(config.count)
-    const brightnesses = new Float32Array(config.count)
-    const twinkleRates = new Float32Array(config.count)
-    for (let i = 0; i < config.count; i++) {
+    const positions = new Float32Array(particleCount * 3)
+    const phases = new Float32Array(particleCount)
+    const sparkles = new Float32Array(particleCount)
+    const sizes = new Float32Array(particleCount)
+    const brightnesses = new Float32Array(particleCount)
+    const twinkleRates = new Float32Array(particleCount)
+    for (let i = 0; i < particleCount; i++) {
       const z = random() * 2 - 1
       const angle = random() * Math.PI * 2
-      const radius = 28 + random() * 48
+      const radius = 18 + random() * 26
       const planar = Math.sqrt(1 - z * z)
       positions.set(
         [radius * planar * Math.cos(angle), radius * z, radius * planar * Math.sin(angle)],
