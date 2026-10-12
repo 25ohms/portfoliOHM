@@ -61,6 +61,7 @@ export default function SceneContents({
   const isFinalFrontier = isFinalFrontierTrack(currentTrack?.title)
   const showEnterprise = playing && isFinalFrontier
   const layoutTarget = useRef({ x: config.model.position[0], scale: config.model.scale })
+  const layoutAnimating = useRef(false)
   const { camera, size, invalidate } = useThree()
   const projectionRaycaster = useRef(new Raycaster())
   const projectionPlane = useRef(new Plane())
@@ -140,6 +141,7 @@ export default function SceneContents({
       }
     }
     layoutTarget.current = { x: config.model.position[0] + offsetX, scale }
+    layoutAnimating.current = true
     invalidate()
   }, [
     cardOpen,
@@ -214,6 +216,16 @@ export default function SceneContents({
       group.current.scale.setScalar(
         MathUtils.lerp(group.current.scale.x, layoutTarget.current.scale, smoothing),
       )
+      if (layoutAnimating.current) {
+        const target = layoutTarget.current
+        const settled =
+          Math.abs(group.current.position.x - target.x) < 0.001 &&
+          Math.abs(group.current.position.y - config.model.position[1]) < 0.001 &&
+          Math.abs(group.current.position.z - config.model.position[2]) < 0.001 &&
+          Math.abs(group.current.scale.x - target.scale) < 0.001
+        if (settled) layoutAnimating.current = false
+        else if (!running) invalidate()
+      }
     }
     if (subjectGroup.current) {
       const time = playing && showEnterprise ? getCurrentTime() : -1
