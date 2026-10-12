@@ -70,6 +70,8 @@ export default function SceneContents({
   const projectionNormal = useRef(new Vector3())
   const projectionNdc = useRef(new Vector2())
   const cameraTarget = useRef(new Vector3())
+  const cameraTargetOffset = useRef(new Vector3())
+  const groupWorldOrigin = useRef(new Vector3())
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
   useEffect(() => {
     runtime.invalidate.current = invalidate
@@ -181,6 +183,14 @@ export default function SceneContents({
       runtime.pose.current[1] =
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
     }
+    const time = playing && showEnterprise ? getCurrentTime() : -1
+    const taxiProgress = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
+    if (subjectGroup.current) {
+      const taxiScale = 1 + (TAXI_SUBJECT_SCALE - 1) * taxiProgress
+      subjectGroup.current.scale.setScalar(taxiScale)
+      subjectGroup.current.position.y = -TAXI_SUBJECT_Y_OFFSET * taxiProgress
+      subjectGroup.current.rotation.x = TAXI_SUBJECT_X_ROTATION * taxiProgress
+    }
     if (group.current) {
       debugObjects.current.baby = group.current
       group.current.rotation.set(...runtime.pose.current)
@@ -212,6 +222,12 @@ export default function SceneContents({
       const { theta, phi } = runtime.cameraOrbit.current
       group.current.updateWorldMatrix(true, false)
       const target = subjectGroup.current?.getWorldPosition(cameraTarget.current) ?? group.current.position
+      // Counter the taxi translation so the camera preserves the original staged pan
+      // while continuing to orbit around the shared baby/logo group.
+      cameraTargetOffset.current.set(0, TAXI_SUBJECT_Y_OFFSET * taxiProgress, 0)
+      group.current.localToWorld(cameraTargetOffset.current)
+      group.current.getWorldPosition(groupWorldOrigin.current)
+      target.add(cameraTargetOffset.current.sub(groupWorldOrigin.current))
       const sinPhi = Math.sin(phi)
       camera.position.set(
         target.x + distance * sinPhi * Math.sin(theta),
@@ -231,14 +247,6 @@ export default function SceneContents({
         if (settled) layoutAnimating.current = false
         else if (!running) invalidate()
       }
-    }
-    if (subjectGroup.current) {
-      const time = playing && showEnterprise ? getCurrentTime() : -1
-      const taxiProgress = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
-      const taxiScale = 1 + (TAXI_SUBJECT_SCALE - 1) * taxiProgress
-      subjectGroup.current.scale.setScalar(taxiScale)
-      subjectGroup.current.position.y = -TAXI_SUBJECT_Y_OFFSET * taxiProgress
-      subjectGroup.current.rotation.x = TAXI_SUBJECT_X_ROTATION * taxiProgress
     }
     if (running && !samples.current.reported) {
       const s = samples.current
