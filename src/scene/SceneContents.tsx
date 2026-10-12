@@ -21,6 +21,7 @@ export interface RuntimeScene {
   pose: MutableRefObject<Vec3>
   invalidate: MutableRefObject<() => void>
   dragging: MutableRefObject<boolean>
+  cameraOrbit: MutableRefObject<{ theta: number; phi: number }>
 }
 
 export type CameraView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'xz'
@@ -68,6 +69,7 @@ export default function SceneContents({
   const projectionHit = useRef(new Vector3())
   const projectionNormal = useRef(new Vector3())
   const projectionNdc = useRef(new Vector2())
+  const cameraTarget = useRef(new Vector3())
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
   useEffect(() => {
     runtime.invalidate.current = invalidate
@@ -84,36 +86,21 @@ export default function SceneContents({
       1.12,
       config.camera.padding,
     )
-    perspective.up.set(0, 1, 0)
-    switch (cameraView) {
-      case 'back':
-        perspective.position.set(0, 0, -distance)
-        break
-      case 'left':
-        perspective.position.set(-distance, 0, 0)
-        break
-      case 'right':
-        perspective.position.set(distance, 0, 0)
-        break
-      case 'top':
-        perspective.position.set(0, distance, 0)
-        perspective.up.set(0, 0, -1)
-        break
-      case 'bottom':
-        perspective.position.set(0, -distance, 0)
-        perspective.up.set(0, 0, 1)
-        break
-      case 'xz':
-        perspective.position.set(0, -distance, 0)
-        perspective.up.set(0, 0, 1)
-        break
-      default:
-        perspective.position.set(0, 0, distance)
+    const views: Record<CameraView, { theta: number; phi: number }> = {
+      front: { theta: 0, phi: Math.PI / 2 },
+      back: { theta: Math.PI, phi: Math.PI / 2 },
+      left: { theta: -Math.PI / 2, phi: Math.PI / 2 },
+      right: { theta: Math.PI / 2, phi: Math.PI / 2 },
+      top: { theta: 0, phi: 0.08 },
+      bottom: { theta: 0, phi: Math.PI - 0.08 },
+      xz: { theta: 0, phi: Math.PI - 0.08 },
     }
+    runtime.cameraOrbit.current = { ...views[cameraView] }
+    perspective.position.set(0, 0, distance)
     perspective.lookAt(0, 0, 0)
     perspective.updateProjectionMatrix()
     invalidate()
-  }, [camera, cameraView, config.camera, size, invalidate])
+  }, [camera, cameraView, config.camera, size, invalidate, runtime])
   useEffect(() => {
     let offsetX = 0
     let scale = config.model.scale
@@ -130,7 +117,7 @@ export default function SceneContents({
         const fraction = centerX / experienceRect.width - 0.5
         const worldWidth =
           (2 *
-            camera.position.z *
+            cameraDistance(size.width / size.height, config.camera.fov, 1.12, config.camera.padding) *
             Math.tan(MathUtils.degToRad(config.camera.fov) / 2) *
             size.width) /
           size.height
@@ -216,6 +203,24 @@ export default function SceneContents({
       group.current.scale.setScalar(
         MathUtils.lerp(group.current.scale.x, layoutTarget.current.scale, smoothing),
       )
+      const distance = cameraDistance(
+        size.width / size.height,
+        config.camera.fov,
+        1.12,
+        config.camera.padding,
+      )
+      const { theta, phi } = runtime.cameraOrbit.current
+      group.current.updateWorldMatrix(true, false)
+      const target = subjectGroup.current?.getWorldPosition(cameraTarget.current) ?? group.current.position
+      const sinPhi = Math.sin(phi)
+      camera.position.set(
+        target.x + distance * sinPhi * Math.sin(theta),
+        target.y + distance * Math.cos(phi),
+        target.z + distance * sinPhi * Math.cos(theta),
+      )
+      camera.up.set(0, 1, 0)
+      camera.lookAt(target)
+      camera.updateMatrixWorld()
       if (layoutAnimating.current) {
         const target = layoutTarget.current
         const settled =
@@ -255,25 +260,27 @@ export default function SceneContents({
   return (
     <>
       <color attach="background" args={['#000000']} />
-      <Nebula />
-      <Stars config={config.stars} />
-      <group ref={group} position={config.model.position} scale={config.model.scale}>
-        <group ref={subjectGroup}>
-          <Suspense fallback={null}>
-            <>
-              <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
-                <Logo config={config} timelineEnabled={isFinalFrontier} />
-              </group>
-              <Fetus config={config} onReady={onReady} />
-            </>
-          </Suspense>
+      <group name="scene-supergroup">
+        <Nebula />
+        <Stars config={config.stars} />
+        <group ref={group} position={config.model.position} scale={config.model.scale}>
+          <group ref={subjectGroup}>
+            <Suspense fallback={null}>
+              <>
+                <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
+                  <Logo config={config} timelineEnabled={isFinalFrontier} />
+                </group>
+                <Fetus config={config} onReady={onReady} />
+              </>
+            </Suspense>
+          </group>
         </group>
+        {showEnterprise && (
+          <Suspense fallback={null}>
+            <Enterprise anchor={group} debugObjects={debugObjects} />
+          </Suspense>
+        )}
       </group>
-      {showEnterprise && (
-        <Suspense fallback={null}>
-          <Enterprise anchor={group} debugObjects={debugObjects} />
-        </Suspense>
-      )}
       <PalettePass config={config} resolution={resolution} />
     </>
   )

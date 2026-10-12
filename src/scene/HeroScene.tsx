@@ -185,8 +185,9 @@ export default function HeroScene({
   const pose = useRef<Vec3>([...config.model.rotation])
   const invalidate = useRef<() => void>(() => {})
   const dragging = useRef(false)
+  const cameraOrbit = useRef({ theta: 0, phi: Math.PI / 2 })
   const pointer = useRef<{ id: number; x: number; y: number } | null>(null)
-  const runtime = useMemo(() => ({ pose, invalidate, dragging }), [])
+  const runtime = useMemo(() => ({ pose, invalidate, dragging, cameraOrbit }), [])
   const debugObjects = useRef<SceneDebugObjects>({
     baby: null,
     enterprise: null,
@@ -320,8 +321,11 @@ export default function HeroScene({
   function moveDrag(event: PointerEvent<HTMLDivElement>) {
     const previous = pointer.current
     if (!previous || previous.id !== event.pointerId) return
-    pose.current[1] += (event.clientX - previous.x) * 0.006
-    pose.current[0] += (event.clientY - previous.y) * 0.006
+    cameraOrbit.current.theta -= (event.clientX - previous.x) * 0.006
+    cameraOrbit.current.phi = Math.max(
+      0.08,
+      Math.min(Math.PI - 0.08, cameraOrbit.current.phi + (event.clientY - previous.y) * 0.006),
+    )
     previous.x = event.clientX
     previous.y = event.clientY
     invalidate.current()
@@ -352,7 +356,7 @@ export default function HeroScene({
             <Canvas
               dpr={[1, config.quality.maxDpr]}
               frameloop={running ? 'always' : 'demand'}
-              camera={{ position: [0, 0, 5], near: 0.01, far: 1200, fov: config.camera.fov }}
+              camera={{ position: [0, 0, 5], near: 0.01, far: 5000, fov: config.camera.fov }}
               gl={{
                 antialias: false,
                 alpha: false,
@@ -413,10 +417,10 @@ export default function HeroScene({
             'STILL / OHMEGA'
           ) : (
             <>
-              <span className="desktop-instruction">DRAG TO ROTATE · </span>
-              <span className="mobile-instruction">SWIPE TO ROTATE · </span>
+              <span className="desktop-instruction">DRAG TO ORBIT · </span>
+              <span className="mobile-instruction">SWIPE TO ORBIT · </span>
               <span className="sr-only">
-                Drag to rotate. Press 1 to toggle rotation movement. Home resets.{' '}
+                Drag to orbit the camera. Press 1 to toggle sculpture rotation. Home resets.{' '}
               </span>
               EXPLORE THE VESSEL
             </>
@@ -424,7 +428,10 @@ export default function HeroScene({
         </span>
         {!failed && (
           <div>
-            <button aria-label="Reset sculpture pose" onClick={resetPose}>
+            <button aria-label="Reset camera view" onClick={() => {
+              cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
+              resetPose()
+            }}>
               ↺
             </button>
           </div>

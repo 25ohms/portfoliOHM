@@ -64,7 +64,14 @@ export default function Stars({ config }: { config: SceneConfig['stars'] }) {
     const brightnesses = new Float32Array(config.count)
     const twinkleRates = new Float32Array(config.count)
     for (let i = 0; i < config.count; i++) {
-      positions.set([(random() - 0.5) * 24, (random() - 0.5) * 16, -2 - random() * 12], i * 3)
+      const z = random() * 2 - 1
+      const angle = random() * Math.PI * 2
+      const radius = 28 + random() * 48
+      const planar = Math.sqrt(1 - z * z)
+      positions.set(
+        [radius * planar * Math.cos(angle), radius * z, radius * planar * Math.sin(angle)],
+        i * 3,
+      )
       phases[i] = random() * Math.PI * 2
       sparkles[i] = random()
       sizes[i] = 0.4 + random() * 2.2

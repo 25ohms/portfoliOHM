@@ -1,38 +1,41 @@
 import { useMemo, useRef } from 'react'
+import { BackSide, ShaderMaterial } from 'three'
 import { useFrame } from '@react-three/fiber'
-import { ShaderMaterial } from 'three'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { readBassLevel } from '../audio/bass'
 
 const SPEED_TRANSITION_RATE = 4.5
 
 const vertexShader = `
-  varying vec2 vUv;
+  varying vec3 vDirection;
   void main() {
-    vUv = uv;
+    vDirection = normalize(position);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `
 
 const fragmentShader = `
   uniform float uTime;
-  varying vec2 vUv;
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
+  varying vec3 vDirection;
+  float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+  float noise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+    float x00 = mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x);
+    float x10 = mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x);
+    float x01 = mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x);
+    float x11 = mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x);
+    return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
   }
   void main() {
-    vec2 p = (vUv - 0.5) * vec2(2.0, 1.2);
-    float cloud = noise(p * 3.0 + vec2(uTime * 0.008, -uTime * 0.004));
-    cloud += 0.5 * noise(p * 6.0 - uTime * 0.006);
-    cloud += 0.25 * noise(p * 12.0 + uTime * 0.003);
-    float shape = smoothstep(0.36, 0.88, cloud) * (1.0 - smoothstep(0.35, 1.12, length(p * vec2(0.8, 1.0))));
-    float wisps = smoothstep(0.52, 0.93, noise(p * 4.2 + vec2(0.0, uTime * 0.005)));
+    vec3 p = normalize(vDirection);
+    float cloud = noise(p * 5.0 + vec3(uTime * 0.008, -uTime * 0.004, uTime * 0.003));
+    cloud += 0.5 * noise(p * 11.0 - vec3(uTime * 0.006));
+    cloud += 0.25 * noise(p * 23.0 + vec3(uTime * 0.003));
+    float shape = smoothstep(0.72, 1.18, cloud);
+    float wisps = smoothstep(0.52, 0.93, noise(p * 8.0 + vec3(0.0, uTime * 0.005, 0.0)));
     float nebula = clamp(shape * 0.48 + wisps * shape * 0.4, 0.0, 0.48);
-    gl_FragColor = vec4(vec3(nebula), nebula);
+    gl_FragColor = vec4(vec3(nebula), 1.0);
   }
 `
 
@@ -55,15 +58,14 @@ export default function Nebula() {
     }
   })
   return (
-    <mesh position={[0, 0, -18]}>
-      <planeGeometry args={[46, 29]} />
+    <mesh renderOrder={-1000}>
+      <sphereGeometry args={[2200, 64, 48]} />
       <shaderMaterial
         ref={material}
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}
         uniforms={{ uTime: { value: 0 } }}
-        transparent
-        depthWrite={false}
+        side={BackSide}
         toneMapped={false}
       />
     </mesh>
