@@ -313,6 +313,8 @@ export default function Enterprise({
   const engineFlares = useRef<Array<Mesh | null>>([null, null])
   const movementDirection = useMemo(() => new Vector3(0, 0, -1), [])
   const warpDirection = useMemo(() => new Vector3(0, 0, -1), [])
+  const anchorWorldPosition = useMemo(() => new Vector3(), [])
+  const aimedPointLocal = useMemo(() => new Vector3(), [])
   const logoMeanLocal = useMemo(() => new Vector3(), [])
   const logoMeanWorld = useMemo(() => new Vector3(), [])
   const babyBackCenterlineSegments = useMemo(() => [] as Vector3[], [])
@@ -480,34 +482,34 @@ export default function Enterprise({
     debugObjects.current.enterprise = ship
     const time = getCurrentTime()
     const anchorGroup = anchor.current
-    const anchorX = anchorGroup?.position.x ?? 0
-    const anchorY = anchorGroup?.position.y ?? 0
-    const anchorZ = anchorGroup?.position.z ?? 0
     const anchorScale = anchorGroup?.scale.x ?? 1
+    anchorGroup?.updateWorldMatrix(true, false)
+    anchorGroup?.getWorldPosition(anchorWorldPosition)
     const camera3d = camera as PerspectiveCamera
     const endY = ENTERPRISE_Y
-    const requestedFocalDistance = anchorScale * PARABOLA_FOCAL_DISTANCE
-    const focusX = anchorX + POST_VERTEX_X - requestedFocalDistance
-    const vertexZ = anchorZ + ENTERPRISE_DEPTH_OFFSET
+    const requestedFocalDistance = PARABOLA_FOCAL_DISTANCE
+    const focusX = POST_VERTEX_X - requestedFocalDistance
+    const vertexZ = ENTERPRISE_DEPTH_OFFSET
+    const approachStartMinX = APPROACH_START_MIN_X / Math.max(anchorScale, 1e-5)
     // The focus sits close to the vertex, keeping the inbound parabola narrow.
     const cameraDepth = Math.hypot(
-      camera3d.position.x - anchorX,
-      camera3d.position.y - anchorY,
-      camera3d.position.z - anchorZ,
+      camera3d.position.x - anchorWorldPosition.x,
+      camera3d.position.y - anchorWorldPosition.y,
+      camera3d.position.z - anchorWorldPosition.z,
     )
     const viewTangent = Math.tan(MathUtils.degToRad(camera3d.fov) / 2)
-    const halfViewHeight = cameraDepth * viewTangent
+    const halfViewHeight = (cameraDepth * viewTangent) / Math.max(anchorScale, 1e-5)
     const halfViewWidth = halfViewHeight * (size.width / size.height)
     const shipMargin = SHIP_SCALE
     const maxViewX = halfViewWidth - shipMargin
     // The Enterprise's center crosses X = -3 at APPROACH_START.
     const maxApproachDepth = Math.max(0.01, halfViewHeight - SHIP_SCALE * 0.12)
-    const minimumFocalDistance = anchorScale * 0.05
+    const minimumFocalDistance = 0.05
     const maximumFocalDistance = Math.max(minimumFocalDistance, maxViewX - focusX)
     let parabolaP = Math.min(requestedFocalDistance, maximumFocalDistance)
     let approachDepth = maxApproachDepth
     for (let i = 0; i < 6; i++) {
-      const horizontalOffset = APPROACH_START_MIN_X - focusX
+      const horizontalOffset = approachStartMinX - focusX
       const focalDistanceForEntry =
         (horizontalOffset + Math.sqrt(horizontalOffset ** 2 + approachDepth ** 2)) / 2
       parabolaP = Math.max(
@@ -515,7 +517,7 @@ export default function Enterprise({
         Math.min(requestedFocalDistance, maximumFocalDistance, focalDistanceForEntry),
       )
       const depthToEntry = Math.sqrt(
-        Math.max(0, 4 * parabolaP * (focusX + parabolaP - APPROACH_START_MIN_X)),
+        Math.max(0, 4 * parabolaP * (focusX + parabolaP - approachStartMinX)),
       )
       approachDepth = Math.min(maxApproachDepth, depthToEntry)
     }
@@ -549,12 +551,14 @@ export default function Enterprise({
               babyBackCenterlineLocal,
             )
         }
-        const aimPoint = babyBackCenterlineReady.current && babyGroup.current
+        const aimPointWorld = babyBackCenterlineReady.current && babyGroup.current
           ? babyBackCenterlineWorld
               .copy(babyBackCenterlineLocal)
               .applyMatrix4(babyGroup.current.matrixWorld)
           : logoMeanWorld
-        aimedDirection.copy(aimPoint).sub(taxiEnd)
+        aimedPointLocal.copy(aimPointWorld)
+        if (anchorGroup) anchorGroup.worldToLocal(aimedPointLocal)
+        aimedDirection.copy(aimedPointLocal).sub(taxiEnd)
         if (aimedDirection.lengthSq() > 1e-8) aimedDirection.normalize()
         else aimedDirection.set(0, 0, -1)
 
@@ -568,7 +572,7 @@ export default function Enterprise({
     }
     warpStart.copy(taxiEnd).addScaledVector(warpDirection, warmupDistance)
     const preApproachStartX =
-      APPROACH_START_MIN_X - SHIP_SCALE * shipHalfExtents.x
+      approachStartMinX - SHIP_SCALE * shipHalfExtents.x
     const preApproachDepth = Math.sqrt(
       Math.max(0, 4 * parabolaP * (vertexX - preApproachStartX)),
     )

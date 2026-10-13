@@ -293,17 +293,17 @@ export default function SceneContents({
               </>
             </Suspense>
           </group>
+          {showEnterprise && (
+            <Suspense fallback={null}>
+              <Enterprise
+                anchor={group}
+                babyGroup={babyGroup}
+                logoGroup={logoGroup}
+                debugObjects={debugObjects}
+              />
+            </Suspense>
+          )}
         </group>
-        {showEnterprise && (
-          <Suspense fallback={null}>
-            <Enterprise
-              anchor={group}
-              babyGroup={babyGroup}
-              logoGroup={logoGroup}
-              debugObjects={debugObjects}
-            />
-          </Suspense>
-        )}
       </group>
       <PalettePass config={config} resolution={resolution} />
     </>

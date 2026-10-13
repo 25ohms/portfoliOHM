@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { NoToneMapping, SRGBColorSpace } from 'three'
+import { NoToneMapping, SRGBColorSpace, Vector3 } from 'three'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { logPerformance } from '../utils/performanceLogger'
 import {
@@ -99,6 +99,7 @@ function SceneObjectMenu({
   debugObjects: MutableRefObject<SceneDebugObjects>
 }) {
   const [positions, setPositions] = useState({ baby: '—', enterprise: '—', direction: '—', cursor: '—' })
+  const worldPosition = new Vector3()
   const planeLabel =
     cameraView === 'front' || cameraView === 'back'
       ? 'XY PLANE'
@@ -112,8 +113,8 @@ function SceneObjectMenu({
         : 'X —   Y —   Z —'
     const timer = window.setInterval(() => {
       const next = {
-        baby: format(debugObjects.current.baby?.position),
-        enterprise: format(debugObjects.current.enterprise?.position),
+        baby: format(debugObjects.current.baby?.getWorldPosition(worldPosition)),
+        enterprise: format(debugObjects.current.enterprise?.getWorldPosition(worldPosition)),
         direction: format(debugObjects.current.enterpriseDirection ?? undefined),
         cursor: format(debugObjects.current.cursorProjection ?? undefined),
       }
@@ -254,6 +255,9 @@ export default function HeroScene({
         return
       if (rotationEnabledRef.current) {
         pose.current = [0, 0, 0]
+        cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
+        setCameraView('front')
+        setCameraZoom(DEFAULT_CAMERA_ZOOM)
         setConfig((current) => ({
           ...current,
           model: { ...current.model, rotation: [0, 0, 0] },
