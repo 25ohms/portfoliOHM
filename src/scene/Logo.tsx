@@ -22,12 +22,15 @@ import { LOGO_BLOOM_LAYER } from './renderLayers'
 import {
   ENGINE_WARMUP_START,
   TAXI_START,
-  displacementMultiplierAt,
-  WARP_LOGO_FADE_DURATION,
+  WARP_END,
   WARP_START,
+  displacementMultiplierAt,
+  warpGlowEnvelopeAt,
 } from './sceneTimeline'
 
 const TAXI_GLOW_BOOST = 0.75
+const WARP_RETURN_HALO_BOOST = 0.65
+const MID_GLOW_MULTIPLIER = 0.2
 
 function bandLevel(
   data: Uint8Array,
@@ -56,6 +59,7 @@ export default function Logo({
   const beat = useRef({
     level: 0,
     vibration: 0,
+    mid: 0,
     previousKick: 0,
     previousSnare: 0,
     previousAir: 0,
@@ -149,9 +153,11 @@ export default function Logo({
     let kick = 0
     let snare = 0
     let bassTarget = 0
+    let midTarget = 0
     if (!playing) {
       signal.level = 0
       signal.vibration = 0
+      signal.mid = 0
       signal.previousKick = 0
       signal.previousSnare = 0
       signal.previousAir = 0
@@ -162,6 +168,8 @@ export default function Logo({
       const fftSize = analyser.fftSize
       const kickLevel = bandLevel(frequencyData, sampleRate, fftSize, 35, 150)
       bassTarget = Math.max(0, Math.min(1, (kickLevel - 0.1) * 2.2))
+      const midLevel = bandLevel(frequencyData, sampleRate, fftSize, 500, 2000)
+      midTarget = Math.max(0, Math.min(1, (midLevel - 0.06) * 2.5))
       const snareBody = bandLevel(frequencyData, sampleRate, fftSize, 150, 500)
       const snareAir = bandLevel(frequencyData, sampleRate, fftSize, 1400, 5000)
       if (signal.previousKick > 0) {
@@ -181,6 +189,9 @@ export default function Logo({
     const vibrationRate = bassTarget > signal.vibration ? 32 : 12
     signal.vibration +=
       (bassTarget - signal.vibration) * (1 - Math.exp(-Math.min(delta, 0.05) * vibrationRate))
+    const midRate = midTarget > signal.mid ? 10 : 6
+    signal.mid += (midTarget - signal.mid) * (1 - Math.exp(-Math.min(delta, 0.05) * midRate))
+    const audioGlowMultiplier = 1 + MID_GLOW_MULTIPLIER * signal.mid
     const intensity = signal.level
     const base = config.material.intensity
     coreMaterial.color.setRGB(
@@ -192,16 +203,19 @@ export default function Logo({
     haloMaterial.color.setRGB(1.8, 1.8, 1.8)
     let timelineGlow = 0
     let warpFade = 1
+    let haloBoost = TAXI_GLOW_BOOST
     if (timelineEnabled) {
       const timelineTime = getCurrentTime()
       timelineGlow = MathUtils.smoothstep(timelineTime, TAXI_START, ENGINE_WARMUP_START)
-      warpFade = 1 - MathUtils.smoothstep(
-        timelineTime,
-        WARP_START,
-        WARP_START + WARP_LOGO_FADE_DURATION,
+      warpFade = warpGlowEnvelopeAt(timelineTime)
+      haloBoost = MathUtils.lerp(
+        TAXI_GLOW_BOOST,
+        WARP_RETURN_HALO_BOOST,
+        MathUtils.smoothstep(timelineTime, WARP_START, WARP_END),
       )
     }
-    haloMaterial.opacity = (intensity * 0.9 + timelineGlow * TAXI_GLOW_BOOST) * warpFade
+    haloMaterial.opacity =
+      (intensity * 0.9 + timelineGlow * haloBoost) * warpFade * audioGlowMultiplier
     const time = performance.now() / 1000
     const timelineMultiplier = timelineEnabled ? displacementMultiplierAt(getCurrentTime()) : 1
     const amount =

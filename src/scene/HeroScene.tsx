@@ -9,12 +9,11 @@ import {
   useState,
   type ErrorInfo,
   type KeyboardEvent,
-  type MutableRefObject,
   type PointerEvent,
   type ReactNode,
 } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { NoToneMapping, SRGBColorSpace, Vector3 } from 'three'
+import { NoToneMapping, SRGBColorSpace } from 'three'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { logPerformance } from '../utils/performanceLogger'
 import {
@@ -24,11 +23,9 @@ import {
   type SceneConfig,
   type Vec3,
 } from '../config/scene'
-import SceneContents, { type CameraView, type SceneDebugObjects } from './SceneContents'
+import SceneContents, { type SceneDebugObjects } from './SceneContents'
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import('./SceneDevPanel')) : null
-const SHOW_SCENE_OBJECT_MENU = true
-const DEFAULT_CAMERA_ZOOM = 1
 
 function saveDraft(config: SceneConfig) {
   if (!import.meta.env.DEV) return
@@ -73,122 +70,6 @@ class SceneErrorBoundary extends Component<
   }
 }
 
-const CAMERA_VIEWS: { id: CameraView; label: string }[] = [
-  { id: 'front', label: 'FRONT' },
-  { id: 'back', label: 'BACK' },
-  { id: 'left', label: 'LEFT' },
-  { id: 'right', label: 'RIGHT' },
-  { id: 'top', label: 'TOP' },
-  { id: 'bottom', label: 'BOTTOM' },
-  { id: 'xz', label: 'XZ PLANE' },
-]
-
-function SceneObjectMenu({
-  cameraView,
-  onCameraView,
-  cameraZoom,
-  onCameraZoom,
-  onResetCameraZoom,
-  debugObjects,
-}: {
-  cameraView: CameraView
-  onCameraView: (view: CameraView) => void
-  cameraZoom: number
-  onCameraZoom: (zoom: number) => void
-  onResetCameraZoom: () => void
-  debugObjects: MutableRefObject<SceneDebugObjects>
-}) {
-  const [positions, setPositions] = useState({ baby: '—', enterprise: '—', direction: '—', cursor: '—' })
-  const worldPosition = new Vector3()
-  const planeLabel =
-    cameraView === 'front' || cameraView === 'back'
-      ? 'XY PLANE'
-      : cameraView === 'left' || cameraView === 'right'
-        ? 'YZ PLANE'
-        : 'XZ PLANE'
-  useEffect(() => {
-    const format = (position: { x: number; y: number; z: number } | undefined) =>
-      position
-        ? `X ${position.x.toFixed(3)}   Y ${position.y.toFixed(3)}   Z ${position.z.toFixed(3)}`
-        : 'X —   Y —   Z —'
-    const timer = window.setInterval(() => {
-      const next = {
-        baby: format(debugObjects.current.baby?.getWorldPosition(worldPosition)),
-        enterprise: format(debugObjects.current.enterprise?.getWorldPosition(worldPosition)),
-        direction: format(debugObjects.current.enterpriseDirection ?? undefined),
-        cursor: format(debugObjects.current.cursorProjection ?? undefined),
-      }
-      setPositions((current) =>
-        current.baby === next.baby &&
-        current.enterprise === next.enterprise &&
-        current.direction === next.direction &&
-        current.cursor === next.cursor
-          ? current
-          : next,
-      )
-    }, 100)
-    return () => window.clearInterval(timer)
-  }, [debugObjects])
-
-  return (
-    <aside className="scene-object-menu" aria-label="Scene object and camera development menu">
-      <header><span>OBJECT MODE</span><span>FINAL FRONTIER</span></header>
-      <div className="scene-object-menu-section">
-        <span className="scene-object-menu-label">CAMERA VIEW</span>
-        <div className="scene-camera-views">
-          {CAMERA_VIEWS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={cameraView === id}
-              onClick={() => onCameraView(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="scene-object-menu-section">
-        <div className="scene-camera-zoom-heading">
-          <label className="scene-object-menu-label" htmlFor="scene-camera-zoom">
-            CAMERA ZOOM
-          </label>
-          <output htmlFor="scene-camera-zoom">{cameraZoom.toFixed(2)}×</output>
-        </div>
-        <input
-          id="scene-camera-zoom"
-          className="scene-camera-zoom"
-          type="range"
-          min="0.5"
-          max="2.5"
-          step="0.01"
-          value={cameraZoom}
-          onChange={(event) => onCameraZoom(Number(event.currentTarget.value))}
-        />
-        <button className="scene-camera-zoom-reset" type="button" onClick={onResetCameraZoom}>
-          RESET ZOOM TO DEFAULT
-        </button>
-      </div>
-      <div className="scene-object-menu-section">
-        <span className="scene-object-menu-label">BABY / WORLD POSITION</span>
-        <code>{positions.baby}</code>
-      </div>
-      <div className="scene-object-menu-section">
-        <span className="scene-object-menu-label">ENTERPRISE / WORLD POSITION</span>
-        <code>{positions.enterprise}</code>
-      </div>
-      <div className="scene-object-menu-section">
-        <span className="scene-object-menu-label">ENTERPRISE / FORWARD UNIT VECTOR</span>
-        <code>{positions.direction}</code>
-      </div>
-      <div className="scene-object-menu-section">
-        <span className="scene-object-menu-label">CURSOR / {planeLabel} · THROUGH BABY</span>
-        <code>{positions.cursor}</code>
-      </div>
-    </aside>
-  )
-}
-
 export default function HeroScene({
   active = true,
   cardOpen = false,
@@ -207,8 +88,6 @@ export default function HeroScene({
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelRevision, setPanelRevision] = useState(0)
   const [rotationEnabled, setRotationEnabled] = useState(true)
-  const [cameraView, setCameraView] = useState<CameraView>('front')
-  const [cameraZoom, setCameraZoom] = useState(DEFAULT_CAMERA_ZOOM)
   const rotationEnabledRef = useRef(rotationEnabled)
   rotationEnabledRef.current = rotationEnabled
   const [audioReleaseActive, setAudioReleaseActive] = useState(false)
@@ -256,8 +135,6 @@ export default function HeroScene({
       if (rotationEnabledRef.current) {
         pose.current = [0, 0, 0]
         cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
-        setCameraView('front')
-        setCameraZoom(DEFAULT_CAMERA_ZOOM)
         setConfig((current) => ({
           ...current,
           model: { ...current.model, rotation: [0, 0, 0] },
@@ -332,11 +209,6 @@ export default function HeroScene({
     pose.current = [...config.model.rotation]
     invalidate.current()
   }
-  const changeCameraZoom = (zoom: number) => {
-    setCameraZoom(zoom)
-    invalidate.current()
-  }
-  const resetCameraZoom = () => changeCameraZoom(DEFAULT_CAMERA_ZOOM)
   const finishDrag = () => {
     dragging.current = false
     pointer.current = null
@@ -434,8 +306,6 @@ export default function HeroScene({
                 resolution={config.quality.resolution * quality}
                 onReady={handleReady}
                 onSlow={handleSlow}
-                cameraView={cameraView}
-                cameraZoom={cameraZoom}
                 debugObjects={debugObjects}
               />
             </Canvas>
@@ -446,16 +316,6 @@ export default function HeroScene({
         <span>VESSEL_001</span>
         <span>SYS / OHMEGA</span>
       </div>
-      {import.meta.env.DEV && SHOW_SCENE_OBJECT_MENU && (
-        <SceneObjectMenu
-          cameraView={cameraView}
-          onCameraView={setCameraView}
-          cameraZoom={cameraZoom}
-          onCameraZoom={changeCameraZoom}
-          onResetCameraZoom={resetCameraZoom}
-          debugObjects={debugObjects}
-        />
-      )}
       <div className="scene-controls">
         <span id="scene-instructions">
           {failed ? (
@@ -477,7 +337,6 @@ export default function HeroScene({
               aria-label="Reset camera view"
               onClick={() => {
                 cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
-                resetCameraZoom()
                 resetPose()
               }}
             >

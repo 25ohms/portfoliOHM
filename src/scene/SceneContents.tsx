@@ -11,11 +11,18 @@ import { cameraDistance } from './math'
 import Enterprise from './Enterprise'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { recordSceneFrame } from '../utils/performanceLogger'
-import { ENGINE_WARMUP_START, TAXI_START, isFinalFrontierTrack } from './sceneTimeline'
+import {
+  ENGINE_WARMUP_START,
+  TAXI_START,
+  WARP_END,
+  WARP_START,
+  isFinalFrontierTrack,
+} from './sceneTimeline'
 
 const TAXI_SUBJECT_SCALE = 4.5
 const TAXI_SUBJECT_Y_OFFSET = 2.5
 const TAXI_SUBJECT_X_ROTATION = MathUtils.degToRad(-30)
+const DEFAULT_CAMERA_ORBIT = { theta: 0, phi: Math.PI / 2 }
 
 export interface RuntimeScene {
   pose: MutableRefObject<Vec3>
@@ -40,10 +47,8 @@ export default function SceneContents({
   rotationEnabled,
   cardOpen,
   resolution,
-  cameraZoom,
   onReady,
   onSlow,
-  cameraView,
   debugObjects,
 }: {
   config: SceneConfig
@@ -52,12 +57,11 @@ export default function SceneContents({
   rotationEnabled: boolean
   cardOpen: boolean
   resolution: number
-  cameraZoom: number
   onReady: () => void
   onSlow: () => void
-  cameraView: CameraView
   debugObjects: MutableRefObject<SceneDebugObjects>
 }) {
+  const cameraView: CameraView = 'front'
   const group = useRef<Group>(null)
   const subjectGroup = useRef<Group>(null)
   const babyGroup = useRef<Group>(null)
@@ -76,6 +80,7 @@ export default function SceneContents({
   const cameraTarget = useRef(new Vector3())
   const cameraTargetOffset = useRef(new Vector3())
   const groupWorldOrigin = useRef(new Vector3())
+  const warpOrbitStart = useRef<{ theta: number; phi: number; progress: number } | null>(null)
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
   useEffect(() => {
     runtime.invalidate.current = invalidate
@@ -188,7 +193,40 @@ export default function SceneContents({
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
     }
     const time = playing && showEnterprise ? getCurrentTime() : -1
-    const taxiProgress = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
+    const taxiIn = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
+    const warpOut = MathUtils.smoothstep(time, WARP_START, WARP_END)
+    const taxiProgress = taxiIn * (1 - warpOut)
+    if (time < WARP_START) {
+      warpOrbitStart.current = null
+    } else if (time <= WARP_END) {
+      const progress = MathUtils.smoothstep(time, WARP_START, WARP_END)
+      if (!warpOrbitStart.current) {
+        warpOrbitStart.current = { ...runtime.cameraOrbit.current, progress }
+      }
+      if (runtime.dragging.current) {
+        // Keep drag live and restart the remaining scripted return from the
+        // orbit the user is actively choosing.
+        warpOrbitStart.current = { ...runtime.cameraOrbit.current, progress }
+      } else {
+        const start = warpOrbitStart.current
+        const returnProgress = MathUtils.clamp(
+          (progress - start.progress) / (1 - start.progress || 1),
+          0,
+          1,
+        )
+        const thetaDelta = Math.atan2(Math.sin(-start.theta), Math.cos(-start.theta))
+        runtime.cameraOrbit.current = {
+          theta: start.theta + thetaDelta * returnProgress,
+          phi: MathUtils.lerp(start.phi, DEFAULT_CAMERA_ORBIT.phi, returnProgress),
+        }
+      }
+    } else if (warpOrbitStart.current) {
+      // Release the scripted orbit at the endpoint so camera drag remains free.
+      if (!runtime.dragging.current) {
+        runtime.cameraOrbit.current = { ...DEFAULT_CAMERA_ORBIT }
+      }
+      warpOrbitStart.current = null
+    }
     if (subjectGroup.current) {
       const taxiScale = 1 + (TAXI_SUBJECT_SCALE - 1) * taxiProgress
       subjectGroup.current.scale.setScalar(taxiScale)
@@ -222,7 +260,7 @@ export default function SceneContents({
         config.camera.fov,
         1.12,
         config.camera.padding,
-      ) / cameraZoom
+      )
       const { theta, phi } = runtime.cameraOrbit.current
       group.current.updateWorldMatrix(true, false)
       const target = subjectGroup.current?.getWorldPosition(cameraTarget.current) ?? group.current.position

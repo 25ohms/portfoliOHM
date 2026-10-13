@@ -22,10 +22,14 @@ import { useMusicPlayer } from '../audio/MusicPlayer'
 import {
   ENGINE_WARMUP_START,
   isFinalFrontierTrack,
-  WARP_LOGO_FADE_DURATION,
+  WARP_END,
   WARP_START,
+  warpGlowEnvelopeAt,
 } from './sceneTimeline'
 import { LOGO_BLOOM_LAYER } from './renderLayers'
+
+const WARP_RETURN_BLOOM_RADIUS = 8
+const WARP_RETURN_BLOOM_STRENGTH = 4
 
 function accentPalette(config: SceneConfig, accentValue: string, accentShift: number) {
   const accent = new Color().setStyle(accentValue, SRGBColorSpace)
@@ -287,16 +291,30 @@ export default function PalettePass({
     gl.setClearColor(originalClearColor, originalClearAlpha)
 
     const timelineTime = isFinalFrontier ? getCurrentTime() : -1
-    const warpFade = 1 - MathUtils.smoothstep(
+    const warpFade = warpGlowEnvelopeAt(timelineTime)
+    const warmupProgress = MathUtils.smoothstep(
+      timelineTime,
+      ENGINE_WARMUP_START,
+      WARP_START,
+    )
+    const bloomRecovery = MathUtils.smoothstep(
       timelineTime,
       WARP_START,
-      WARP_START + WARP_LOGO_FADE_DURATION,
+      WARP_END,
     )
     const bloomRadius = isFinalFrontier
-      ? (4 + 12 * MathUtils.smoothstep(timelineTime, ENGINE_WARMUP_START, WARP_START)) * warpFade
+      ? MathUtils.lerp(
+          4 + 12 * warmupProgress,
+          WARP_RETURN_BLOOM_RADIUS,
+          MathUtils.smoothstep(timelineTime, WARP_START, WARP_END),
+        )
       : 4
     const bloomStrength = isFinalFrontier
-      ? (1 + 4 * MathUtils.smoothstep(timelineTime, ENGINE_WARMUP_START, WARP_START)) * warpFade
+      ? MathUtils.lerp(
+          1 + 4 * warmupProgress,
+          WARP_RETURN_BLOOM_STRENGTH,
+          bloomRecovery,
+        ) * warpFade
       : 1
     resources.blurMaterial.uniforms.uRadius.value = bloomRadius
     resources.material.uniforms.uBloomStrength.value = bloomStrength
