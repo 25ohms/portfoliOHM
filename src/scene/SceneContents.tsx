@@ -40,6 +40,7 @@ export default function SceneContents({
   rotationEnabled,
   cardOpen,
   resolution,
+  cameraZoom,
   onReady,
   onSlow,
   cameraView,
@@ -51,6 +52,7 @@ export default function SceneContents({
   rotationEnabled: boolean
   cardOpen: boolean
   resolution: number
+  cameraZoom: number
   onReady: () => void
   onSlow: () => void
   cameraView: CameraView
@@ -58,6 +60,8 @@ export default function SceneContents({
 }) {
   const group = useRef<Group>(null)
   const subjectGroup = useRef<Group>(null)
+  const babyGroup = useRef<Group>(null)
+  const logoGroup = useRef<Group>(null)
   const { currentTrack, playing, getCurrentTime } = useMusicPlayer()
   const isFinalFrontier = isFinalFrontierTrack(currentTrack?.title)
   const showEnterprise = playing && isFinalFrontier
@@ -218,7 +222,7 @@ export default function SceneContents({
         config.camera.fov,
         1.12,
         config.camera.padding,
-      )
+      ) / cameraZoom
       const { theta, phi } = runtime.cameraOrbit.current
       group.current.updateWorldMatrix(true, false)
       const target = subjectGroup.current?.getWorldPosition(cameraTarget.current) ?? group.current.position
@@ -275,17 +279,29 @@ export default function SceneContents({
           <group ref={subjectGroup}>
             <Suspense fallback={null}>
               <>
-                <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
+                <group
+                  ref={logoGroup}
+                  position={config.logo.position}
+                  rotation={config.logo.rotation}
+                  scale={0.42}
+                >
                   <Logo config={config} timelineEnabled={isFinalFrontier} />
                 </group>
-                <Fetus config={config} onReady={onReady} />
+                <group ref={babyGroup}>
+                  <Fetus config={config} onReady={onReady} />
+                </group>
               </>
             </Suspense>
           </group>
         </group>
         {showEnterprise && (
           <Suspense fallback={null}>
-            <Enterprise anchor={group} debugObjects={debugObjects} />
+            <Enterprise
+              anchor={group}
+              babyGroup={babyGroup}
+              logoGroup={logoGroup}
+              debugObjects={debugObjects}
+            />
           </Suspense>
         )}
       </group>

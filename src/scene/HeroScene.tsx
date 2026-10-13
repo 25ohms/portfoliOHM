@@ -27,7 +27,8 @@ import {
 import SceneContents, { type CameraView, type SceneDebugObjects } from './SceneContents'
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import('./SceneDevPanel')) : null
-const SHOW_SCENE_OBJECT_MENU = false
+const SHOW_SCENE_OBJECT_MENU = true
+const DEFAULT_CAMERA_ZOOM = 1
 
 function saveDraft(config: SceneConfig) {
   if (!import.meta.env.DEV) return
@@ -85,10 +86,16 @@ const CAMERA_VIEWS: { id: CameraView; label: string }[] = [
 function SceneObjectMenu({
   cameraView,
   onCameraView,
+  cameraZoom,
+  onCameraZoom,
+  onResetCameraZoom,
   debugObjects,
 }: {
   cameraView: CameraView
   onCameraView: (view: CameraView) => void
+  cameraZoom: number
+  onCameraZoom: (zoom: number) => void
+  onResetCameraZoom: () => void
   debugObjects: MutableRefObject<SceneDebugObjects>
 }) {
   const [positions, setPositions] = useState({ baby: '—', enterprise: '—', direction: '—', cursor: '—' })
@@ -141,6 +148,27 @@ function SceneObjectMenu({
         </div>
       </div>
       <div className="scene-object-menu-section">
+        <div className="scene-camera-zoom-heading">
+          <label className="scene-object-menu-label" htmlFor="scene-camera-zoom">
+            CAMERA ZOOM
+          </label>
+          <output htmlFor="scene-camera-zoom">{cameraZoom.toFixed(2)}×</output>
+        </div>
+        <input
+          id="scene-camera-zoom"
+          className="scene-camera-zoom"
+          type="range"
+          min="0.5"
+          max="2.5"
+          step="0.01"
+          value={cameraZoom}
+          onChange={(event) => onCameraZoom(Number(event.currentTarget.value))}
+        />
+        <button className="scene-camera-zoom-reset" type="button" onClick={onResetCameraZoom}>
+          RESET ZOOM TO DEFAULT
+        </button>
+      </div>
+      <div className="scene-object-menu-section">
         <span className="scene-object-menu-label">BABY / WORLD POSITION</span>
         <code>{positions.baby}</code>
       </div>
@@ -179,6 +207,7 @@ export default function HeroScene({
   const [panelRevision, setPanelRevision] = useState(0)
   const [rotationEnabled, setRotationEnabled] = useState(true)
   const [cameraView, setCameraView] = useState<CameraView>('front')
+  const [cameraZoom, setCameraZoom] = useState(DEFAULT_CAMERA_ZOOM)
   const rotationEnabledRef = useRef(rotationEnabled)
   rotationEnabledRef.current = rotationEnabled
   const [audioReleaseActive, setAudioReleaseActive] = useState(false)
@@ -299,6 +328,11 @@ export default function HeroScene({
     pose.current = [...config.model.rotation]
     invalidate.current()
   }
+  const changeCameraZoom = (zoom: number) => {
+    setCameraZoom(zoom)
+    invalidate.current()
+  }
+  const resetCameraZoom = () => changeCameraZoom(DEFAULT_CAMERA_ZOOM)
   const finishDrag = () => {
     dragging.current = false
     pointer.current = null
@@ -397,6 +431,7 @@ export default function HeroScene({
                 onReady={handleReady}
                 onSlow={handleSlow}
                 cameraView={cameraView}
+                cameraZoom={cameraZoom}
                 debugObjects={debugObjects}
               />
             </Canvas>
@@ -411,6 +446,9 @@ export default function HeroScene({
         <SceneObjectMenu
           cameraView={cameraView}
           onCameraView={setCameraView}
+          cameraZoom={cameraZoom}
+          onCameraZoom={changeCameraZoom}
+          onResetCameraZoom={resetCameraZoom}
           debugObjects={debugObjects}
         />
       )}
@@ -435,6 +473,7 @@ export default function HeroScene({
               aria-label="Reset camera view"
               onClick={() => {
                 cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
+                resetCameraZoom()
                 resetPose()
               }}
             >
