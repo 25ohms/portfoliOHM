@@ -188,7 +188,7 @@ export default function SceneContents({
     } else {
       debugObjects.current.cursorProjection = null
     }
-    if (running && rotationEnabled && !runtime.dragging.current) {
+    if (running && rotationEnabled) {
       runtime.pose.current[1] =
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
     }

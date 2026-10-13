@@ -16,7 +16,7 @@ import type { SceneConfig } from '../config/scene'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { readBassLevel, smoothBassLevel } from '../audio/bass'
 import { logPerformance } from '../utils/performanceLogger'
-import { displacementMultiplierAt, isFinalFrontierTrack } from './sceneTimeline'
+import { babyDisplacementMultiplierAt, isFinalFrontierTrack } from './sceneTimeline'
 
 export default function Fetus({ config, onReady }: { config: SceneConfig; onReady: () => void }) {
   const original = useLoader(FetusLoader, modelUrl)
@@ -72,7 +72,7 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     const strength = bassLevel.current
     if (strength === 0) return
     const time = state.clock.elapsedTime
-    const timelineMultiplier = timelineEnabled ? displacementMultiplierAt(getCurrentTime()) : 1
+    const timelineMultiplier = timelineEnabled ? babyDisplacementMultiplierAt(getCurrentTime()) : 1
     for (const geometry of geometries) {
       const position = geometry.getAttribute('position')
       const base = geometry.userData.basePosition as Float32Array | undefined
