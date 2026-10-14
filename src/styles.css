@@ -425,7 +425,7 @@ button {
   padding-top: 15px;
   border-top: 1px solid #29413f;
   color: #78928d;
-  font-size: 8px;
+  font: 8px/1.4 var(--font-ui);
   letter-spacing: 0.12em;
 }
 .scene-keyboard-footer span:first-child {
@@ -436,6 +436,21 @@ button {
 .scene-keyboard-footer kbd {
   min-height: 22px;
   color: #8effdc;
+}
+.scene-keyboard-orbit-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scene-keyboard-orbit-hint svg {
+  width: 11px;
+  height: 13px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: #8effdc;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
 }
 .scene-layer .dev-toggle {
   right: 24px;
@@ -553,6 +568,7 @@ button {
 }
 .hero-copy h1 {
   display: grid;
+  width: max-content;
   grid-template-columns: max-content max-content;
   column-gap: 0.55em;
   row-gap: 0;
@@ -561,6 +577,41 @@ button {
   text-transform: uppercase;
   font: 400 calc(clamp(10px, 1vw, 13px) + 6.67px) / 1.15 var(--font-ui);
   letter-spacing: 0.16em;
+}
+.hero-title-lockup {
+  width: max-content;
+}
+.hero-controls-hint {
+  display: table;
+  margin: 6px 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  background: rgb(0 0 0 / 42%);
+  color: color-mix(in srgb, var(--accent) 68%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent);
+  font: 8px/1.3 var(--font-ui);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  transform-origin: right top;
+  transition: opacity 180ms ease;
+}
+.hero-title-lockup h1.is-title-hovered + .hero-controls-hint {
+  opacity: 1;
+}
+.hero-controls-hint kbd {
+  display: inline-grid;
+  min-width: 20px;
+  min-height: 12px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-bottom-width: 2px;
+  background: #000;
+  color: var(--accent);
+  font: inherit;
+  line-height: 1;
+  vertical-align: 1px;
 }
 .hero-title-word,
 .hero-title-emphasis {

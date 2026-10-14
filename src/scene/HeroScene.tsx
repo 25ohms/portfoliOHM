@@ -471,8 +471,13 @@ export default function HeroScene({
               </section>
             </div>
             <footer className="scene-keyboard-footer">
-              <span><kbd>ESC</kbd> Close map</span>
-              <span>DRAG / SWIPE TO ORBIT</span>
+              <span><kbd>ESC</kbd> OPEN / CLOSE MAP</span>
+              <span className="scene-keyboard-orbit-hint">
+                <svg aria-hidden="true" viewBox="0 0 14 16">
+                  <path d="M2 1.5v10l3-2.5 2 5 2-1-2-5 4 .5L2 1.5Z" />
+                </svg>
+                DRAG / SWIPE TO ORBIT
+              </span>
             </footer>
           </section>
         </div>,

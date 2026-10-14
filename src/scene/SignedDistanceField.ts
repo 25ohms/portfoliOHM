@@ -1,5 +1,3 @@
-import { Vector3, type Mesh } from 'three'
-
 type Triangle = {
   ax: number; ay: number; az: number
   bx: number; by: number; bz: number
@@ -18,9 +16,17 @@ type BvhNode = {
 }
 
 const BVH_LEAF_SIZE = 8
-const RAY_X = 1
-const RAY_Y = 0.000137
-const RAY_Z = 0.000293
+
+export type SignedDistanceGrid = {
+  originX: number
+  originY: number
+  originZ: number
+  cellSize: number
+  sizeX: number
+  sizeY: number
+  sizeZ: number
+  values: Float32Array
+}
 
 function buildBvh(triangles: Triangle[]): BvhNode {
   let minX = Infinity; let minY = Infinity; let minZ = Infinity
@@ -141,93 +147,75 @@ function nearestDistanceSquared(node: BvhNode, x: number, y: number, z: number, 
   return nearestDistanceSquared(left, x, y, z, best)
 }
 
-function rayHitsTriangle(x: number, y: number, z: number, triangle: Triangle) {
+function rayHitX(originX: number, y: number, z: number, triangle: Triangle) {
   const e1X = triangle.bx - triangle.ax; const e1Y = triangle.by - triangle.ay; const e1Z = triangle.bz - triangle.az
   const e2X = triangle.cx - triangle.ax; const e2Y = triangle.cy - triangle.ay; const e2Z = triangle.cz - triangle.az
-  const pX = RAY_Y * e2Z - RAY_Z * e2Y
-  const pY = RAY_Z * e2X - RAY_X * e2Z
-  const pZ = RAY_X * e2Y - RAY_Y * e2X
+  const pX = 0
+  const pY = -e2Z
+  const pZ = e2Y
   const determinant = e1X * pX + e1Y * pY + e1Z * pZ
-  if (Math.abs(determinant) < 1e-12) return false
+  if (Math.abs(determinant) < 1e-12) return null
   const inverse = 1 / determinant
-  const tX = x - triangle.ax; const tY = y - triangle.ay; const tZ = z - triangle.az
+  const tX = originX - triangle.ax; const tY = y - triangle.ay; const tZ = z - triangle.az
   const u = (tX * pX + tY * pY + tZ * pZ) * inverse
-  if (u < 1e-9 || u > 1 - 1e-9) return false
+  if (u <= 1e-9 || u >= 1 - 1e-9) return null
   const qX = tY * e1Z - tZ * e1Y
   const qY = tZ * e1X - tX * e1Z
   const qZ = tX * e1Y - tY * e1X
-  const v = (RAY_X * qX + RAY_Y * qY + RAY_Z * qZ) * inverse
-  if (v < 1e-9 || u + v > 1 - 1e-9) return false
+  const v = qX * inverse
+  if (v <= 1e-9 || u + v >= 1 - 1e-9) return null
   const distance = (e2X * qX + e2Y * qY + e2Z * qZ) * inverse
-  return distance > 1e-9
+  return distance > 1e-9 ? originX + distance : null
 }
 
-function rayHitsBox(node: BvhNode, x: number, y: number, z: number) {
-  let near = 0
-  let far = Infinity
-  let first = (node.minX - x) / RAY_X
-  let second = (node.maxX - x) / RAY_X
-  near = Math.max(near, Math.min(first, second))
-  far = Math.min(far, Math.max(first, second))
-  if (far < near) return false
-  first = (node.minY - y) / RAY_Y
-  second = (node.maxY - y) / RAY_Y
-  near = Math.max(near, Math.min(first, second))
-  far = Math.min(far, Math.max(first, second))
-  if (far < near) return false
-  first = (node.minZ - z) / RAY_Z
-  second = (node.maxZ - z) / RAY_Z
-  near = Math.max(near, Math.min(first, second))
-  far = Math.min(far, Math.max(first, second))
-  if (far < near) return false
-  return far > 1e-9
-}
-
-function countRayHits(node: BvhNode, x: number, y: number, z: number): number {
-  if (!rayHitsBox(node, x, y, z)) return 0
+function collectRayHitsX(
+  node: BvhNode,
+  originX: number,
+  y: number,
+  z: number,
+  intersections: number[],
+) {
+  if (
+    node.maxX < originX ||
+    y < node.minY || y > node.maxY ||
+    z < node.minZ || z > node.maxZ
+  ) return
   if (node.triangles) {
-    let hits = 0
     for (const triangle of node.triangles) {
-      if (rayHitsTriangle(x, y, z, triangle)) hits++
+      const intersection = rayHitX(originX, y, z, triangle)
+      if (intersection !== null) intersections.push(intersection)
     }
-    return hits
+    return
   }
-  return countRayHits(node.left!, x, y, z) + countRayHits(node.right!, x, y, z)
+  collectRayHitsX(node.left!, originX, y, z, intersections)
+  collectRayHitsX(node.right!, originX, y, z, intersections)
 }
 
 export class SignedDistanceField {
-  constructor(
-    private readonly originX: number,
-    private readonly originY: number,
-    private readonly originZ: number,
-    private readonly cellSize: number,
-    private readonly sizeX: number,
-    private readonly sizeY: number,
-    private readonly sizeZ: number,
-    private readonly values: Float32Array,
-  ) {}
+  constructor(private readonly grid: SignedDistanceGrid) {}
 
   sample(x: number, y: number, z: number) {
-    const gx = (x - this.originX) / this.cellSize
-    const gy = (y - this.originY) / this.cellSize
-    const gz = (z - this.originZ) / this.cellSize
-    const clampedX = Math.max(0, Math.min(this.sizeX - 1, gx))
-    const clampedY = Math.max(0, Math.min(this.sizeY - 1, gy))
-    const clampedZ = Math.max(0, Math.min(this.sizeZ - 1, gz))
-    const x0 = Math.min(this.sizeX - 2, Math.floor(clampedX))
-    const y0 = Math.min(this.sizeY - 2, Math.floor(clampedY))
-    const z0 = Math.min(this.sizeZ - 2, Math.floor(clampedZ))
+    const { originX, originY, originZ, cellSize, sizeX, sizeY, sizeZ, values } = this.grid
+    const gx = (x - originX) / cellSize
+    const gy = (y - originY) / cellSize
+    const gz = (z - originZ) / cellSize
+    const clampedX = Math.max(0, Math.min(sizeX - 1, gx))
+    const clampedY = Math.max(0, Math.min(sizeY - 1, gy))
+    const clampedZ = Math.max(0, Math.min(sizeZ - 1, gz))
+    const x0 = Math.min(sizeX - 2, Math.floor(clampedX))
+    const y0 = Math.min(sizeY - 2, Math.floor(clampedY))
+    const z0 = Math.min(sizeZ - 2, Math.floor(clampedZ))
     const tx = clampedX - x0; const ty = clampedY - y0; const tz = clampedZ - z0
-    const plane = this.sizeX * this.sizeY
-    const baseIndex = z0 * plane + y0 * this.sizeX + x0
-    const c000 = this.values[baseIndex]
-    const c100 = this.values[baseIndex + 1]
-    const c010 = this.values[baseIndex + this.sizeX]
-    const c110 = this.values[baseIndex + this.sizeX + 1]
-    const c001 = this.values[baseIndex + plane]
-    const c101 = this.values[baseIndex + plane + 1]
-    const c011 = this.values[baseIndex + plane + this.sizeX]
-    const c111 = this.values[baseIndex + plane + this.sizeX + 1]
+    const plane = sizeX * sizeY
+    const baseIndex = z0 * plane + y0 * sizeX + x0
+    const c000 = values[baseIndex]
+    const c100 = values[baseIndex + 1]
+    const c010 = values[baseIndex + sizeX]
+    const c110 = values[baseIndex + sizeX + 1]
+    const c001 = values[baseIndex + plane]
+    const c101 = values[baseIndex + plane + 1]
+    const c011 = values[baseIndex + plane + sizeX]
+    const c111 = values[baseIndex + plane + sizeX + 1]
     const c00 = c000 * (1 - tx) + c100 * tx
     const c10 = c010 * (1 - tx) + c110 * tx
     const c01 = c001 * (1 - tx) + c101 * tx
@@ -235,46 +223,38 @@ export class SignedDistanceField {
     const c0 = c00 * (1 - ty) + c10 * ty
     const c1 = c01 * (1 - ty) + c11 * ty
     const interpolated = c0 * (1 - tz) + c1 * tz
-    const outsideX = (gx - clampedX) * this.cellSize
-    const outsideY = (gy - clampedY) * this.cellSize
-    const outsideZ = (gz - clampedZ) * this.cellSize
+    const outsideX = (gx - clampedX) * cellSize
+    const outsideY = (gy - clampedY) * cellSize
+    const outsideZ = (gz - clampedZ) * cellSize
     const outsideDistance = Math.hypot(outsideX, outsideY, outsideZ)
     return outsideDistance > 0 ? Math.max(0, interpolated) + outsideDistance : interpolated
   }
 }
 
-export function buildSignedDistanceField(meshes: Mesh[], resolution = 64, padding = 0.95) {
+export function buildSignedDistanceGridFromTriangles(
+  vertices: Float32Array,
+  resolution = 64,
+  padding = 0.95,
+): SignedDistanceGrid {
   const triangles: Triangle[] = []
   let minX = Infinity; let minY = Infinity; let minZ = Infinity
   let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity
-  for (const mesh of meshes) {
-    const geometry = mesh.geometry
-    const position = geometry.getAttribute('position')
-    const index = geometry.index
-    const triangleCount = (index?.count ?? position.count) / 3
-    const a = new Vector3(); const b = new Vector3(); const c = new Vector3()
-    for (let triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++) {
-      const ia = index ? index.getX(triangleIndex * 3) : triangleIndex * 3
-      const ib = index ? index.getX(triangleIndex * 3 + 1) : triangleIndex * 3 + 1
-      const ic = index ? index.getX(triangleIndex * 3 + 2) : triangleIndex * 3 + 2
-      a.fromBufferAttribute(position, ia).applyMatrix4(mesh.matrixWorld)
-      b.fromBufferAttribute(position, ib).applyMatrix4(mesh.matrixWorld)
-      c.fromBufferAttribute(position, ic).applyMatrix4(mesh.matrixWorld)
-      const triangleMinX = Math.min(a.x, b.x, c.x); const triangleMinY = Math.min(a.y, b.y, c.y); const triangleMinZ = Math.min(a.z, b.z, c.z)
-      const triangleMaxX = Math.max(a.x, b.x, c.x); const triangleMaxY = Math.max(a.y, b.y, c.y); const triangleMaxZ = Math.max(a.z, b.z, c.z)
-      triangles.push({
-        ax: a.x, ay: a.y, az: a.z,
-        bx: b.x, by: b.y, bz: b.z,
-        cx: c.x, cy: c.y, cz: c.z,
-        minX: triangleMinX, minY: triangleMinY, minZ: triangleMinZ,
-        maxX: triangleMaxX, maxY: triangleMaxY, maxZ: triangleMaxZ,
-        centerX: (a.x + b.x + c.x) / 3,
-        centerY: (a.y + b.y + c.y) / 3,
-        centerZ: (a.z + b.z + c.z) / 3,
-      })
-      minX = Math.min(minX, triangleMinX); minY = Math.min(minY, triangleMinY); minZ = Math.min(minZ, triangleMinZ)
-      maxX = Math.max(maxX, triangleMaxX); maxY = Math.max(maxY, triangleMaxY); maxZ = Math.max(maxZ, triangleMaxZ)
-    }
+  for (let offset = 0; offset + 8 < vertices.length; offset += 9) {
+    const ax = vertices[offset]; const ay = vertices[offset + 1]; const az = vertices[offset + 2]
+    const bx = vertices[offset + 3]; const by = vertices[offset + 4]; const bz = vertices[offset + 5]
+    const cx = vertices[offset + 6]; const cy = vertices[offset + 7]; const cz = vertices[offset + 8]
+    const triangleMinX = Math.min(ax, bx, cx); const triangleMinY = Math.min(ay, by, cy); const triangleMinZ = Math.min(az, bz, cz)
+    const triangleMaxX = Math.max(ax, bx, cx); const triangleMaxY = Math.max(ay, by, cy); const triangleMaxZ = Math.max(az, bz, cz)
+    triangles.push({
+      ax, ay, az, bx, by, bz, cx, cy, cz,
+      minX: triangleMinX, minY: triangleMinY, minZ: triangleMinZ,
+      maxX: triangleMaxX, maxY: triangleMaxY, maxZ: triangleMaxZ,
+      centerX: (ax + bx + cx) / 3,
+      centerY: (ay + by + cy) / 3,
+      centerZ: (az + bz + cz) / 3,
+    })
+    minX = Math.min(minX, triangleMinX); minY = Math.min(minY, triangleMinY); minZ = Math.min(minZ, triangleMinZ)
+    maxX = Math.max(maxX, triangleMaxX); maxY = Math.max(maxY, triangleMaxY); maxZ = Math.max(maxZ, triangleMaxZ)
   }
   if (triangles.length === 0) throw new Error('Cannot build an SDF without mesh triangles.')
 
@@ -288,17 +268,39 @@ export function buildSignedDistanceField(meshes: Mesh[], resolution = 64, paddin
   const values = new Float32Array(sizeX * sizeY * sizeZ)
   const root = buildBvh(triangles)
   let index = 0
+  const intersections: number[] = []
   for (let zIndex = 0; zIndex < sizeZ; zIndex++) {
     const z = minZ + zIndex * cellSize
     for (let yIndex = 0; yIndex < sizeY; yIndex++) {
       const y = minY + yIndex * cellSize
+      const rayOriginX = minX - cellSize
+      const rayY = y + Math.sin(y * 127.1 + z * 311.7) * cellSize * 1e-4
+      const rayZ = z + Math.sin(y * 269.5 + z * 183.3) * cellSize * 1e-4
+      intersections.length = 0
+      collectRayHitsX(root, rayOriginX, rayY, rayZ, intersections)
+      intersections.sort((a, b) => a - b)
+      let nextIntersection = 0
+      let inside = false
+      let previousDistance = Infinity
       for (let xIndex = 0; xIndex < sizeX; xIndex++) {
         const x = minX + xIndex * cellSize
-        const distance = Math.sqrt(nearestDistanceSquared(root, x, y, z, Infinity))
-        const inside = countRayHits(root, x, y, z) % 2 === 1
+        while (nextIntersection < intersections.length && intersections[nextIntersection] <= x) {
+          inside = !inside
+          nextIntersection++
+        }
+        const searchLimit = previousDistance + cellSize
+        const distanceSquared = nearestDistanceSquared(
+          root,
+          x,
+          y,
+          z,
+          Number.isFinite(previousDistance) ? searchLimit * searchLimit : Infinity,
+        )
+        const distance = Math.sqrt(distanceSquared)
+        previousDistance = distance
         values[index++] = inside ? -distance : distance
       }
     }
   }
-  return new SignedDistanceField(minX, minY, minZ, cellSize, sizeX, sizeY, sizeZ, values)
+  return { originX: minX, originY: minY, originZ: minZ, cellSize, sizeX, sizeY, sizeZ, values }
 }
