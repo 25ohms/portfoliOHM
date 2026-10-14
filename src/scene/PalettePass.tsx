@@ -22,6 +22,7 @@ import { useMusicPlayer } from '../audio/MusicPlayer'
 import {
   ENGINE_WARMUP_START,
   isFinalFrontierTrack,
+  NON_FF_GLOW_SCALE,
   WARP_END,
   WARP_START,
   warpGlowEnvelopeAt,
@@ -308,14 +309,14 @@ export default function PalettePass({
           WARP_RETURN_BLOOM_RADIUS,
           MathUtils.smoothstep(timelineTime, WARP_START, WARP_END),
         )
-      : 4
+      : 4 * NON_FF_GLOW_SCALE
     const bloomStrength = isFinalFrontier
       ? MathUtils.lerp(
           1 + 4 * warmupProgress,
           WARP_RETURN_BLOOM_STRENGTH,
           bloomRecovery,
         ) * warpFade
-      : 1
+      : NON_FF_GLOW_SCALE
     resources.blurMaterial.uniforms.uRadius.value = bloomRadius
     resources.material.uniforms.uBloomStrength.value = bloomStrength
 

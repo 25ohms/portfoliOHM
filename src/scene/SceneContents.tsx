@@ -78,8 +78,6 @@ export default function SceneContents({
   const projectionNormal = useRef(new Vector3())
   const projectionNdc = useRef(new Vector2())
   const cameraTarget = useRef(new Vector3())
-  const cameraTargetOffset = useRef(new Vector3())
-  const groupWorldOrigin = useRef(new Vector3())
   const warpOrbitStart = useRef<{ theta: number; phi: number; progress: number } | null>(null)
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
   useEffect(() => {
@@ -262,14 +260,9 @@ export default function SceneContents({
         config.camera.padding,
       )
       const { theta, phi } = runtime.cameraOrbit.current
-      group.current.updateWorldMatrix(true, false)
-      const target = subjectGroup.current?.getWorldPosition(cameraTarget.current) ?? group.current.position
-      // Counter the taxi translation so the camera preserves the original staged pan
-      // while continuing to orbit around the shared baby/logo group.
-      cameraTargetOffset.current.set(0, TAXI_SUBJECT_Y_OFFSET * taxiProgress, 0)
-      group.current.localToWorld(cameraTargetOffset.current)
-      group.current.getWorldPosition(groupWorldOrigin.current)
-      target.add(cameraTargetOffset.current.sub(groupWorldOrigin.current))
+      // Keep the camera orbit anchored to the scene origin so tab layout motion
+      // remains visible instead of being cancelled by a camera that follows it.
+      const target = cameraTarget.current.set(...config.model.position)
       const sinPhi = Math.sin(phi)
       camera.position.set(
         target.x + distance * sinPhi * Math.sin(theta),

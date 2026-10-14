@@ -21,10 +21,12 @@ import { logPerformance } from '../utils/performanceLogger'
 import { LOGO_BLOOM_LAYER } from './renderLayers'
 import {
   ENGINE_WARMUP_START,
+  NON_FF_GLOW_SCALE,
   TAXI_START,
   WARP_END,
   WARP_START,
   displacementMultiplierAt,
+  lateLogoGlowEnvelopeAt,
   warpGlowEnvelopeAt,
 } from './sceneTimeline'
 
@@ -204,8 +206,9 @@ export default function Logo({
     let timelineGlow = 0
     let warpFade = 1
     let haloBoost = TAXI_GLOW_BOOST
+    let timelineTime = -1
     if (timelineEnabled) {
-      const timelineTime = getCurrentTime()
+      timelineTime = getCurrentTime()
       timelineGlow = MathUtils.smoothstep(timelineTime, TAXI_START, ENGINE_WARMUP_START)
       warpFade = warpGlowEnvelopeAt(timelineTime)
       haloBoost = MathUtils.lerp(
@@ -214,8 +217,14 @@ export default function Logo({
         MathUtils.smoothstep(timelineTime, WARP_START, WARP_END),
       )
     }
-    haloMaterial.opacity =
-      (intensity * 0.9 + timelineGlow * haloBoost) * warpFade * audioGlowMultiplier
+    const lateGlowEnvelope = timelineEnabled
+      ? lateLogoGlowEnvelopeAt(timelineTime)
+      : 1
+    const haloOpacity =
+      (intensity * 0.9 + timelineGlow * haloBoost * lateGlowEnvelope) * warpFade * audioGlowMultiplier
+    haloMaterial.opacity = timelineEnabled
+      ? haloOpacity
+      : haloOpacity * NON_FF_GLOW_SCALE
     const time = performance.now() / 1000
     const timelineMultiplier = timelineEnabled ? displacementMultiplierAt(getCurrentTime()) : 1
     const amount =
