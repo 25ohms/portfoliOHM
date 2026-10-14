@@ -51,6 +51,7 @@ function PortfolioExperience() {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
+      if (event.key !== 'Escape' && target.closest('[role="dialog"]')) return
       if (target.closest('input:not([type="range"]), textarea, select, [contenteditable="true"]'))
         return
       if (event.key === ' ' || event.code === 'Space') {
@@ -68,9 +69,6 @@ function PortfolioExperience() {
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         move(event.key === 'ArrowDown' ? 1 : -1)
-      } else if (event.key === 'Escape') {
-        if (target.closest('[role="dialog"]')) return
-        setSelected(0)
       }
     }
     window.addEventListener('keydown', onKeyDown)

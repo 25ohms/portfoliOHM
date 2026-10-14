@@ -12,6 +12,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Canvas } from '@react-three/fiber'
 import { NoToneMapping, SRGBColorSpace } from 'three'
 import { useMusicPlayer } from '../audio/MusicPlayer'
@@ -88,6 +89,9 @@ export default function HeroScene({
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelRevision, setPanelRevision] = useState(0)
   const [rotationEnabled, setRotationEnabled] = useState(true)
+  const [controlsVisible, setControlsVisible] = useState(false)
+  const controlsCloseButton = useRef<HTMLButtonElement>(null)
+  const returnFocusTo = useRef<HTMLElement | null>(null)
   const rotationEnabledRef = useRef(rotationEnabled)
   rotationEnabledRef.current = rotationEnabled
   const [audioReleaseActive, setAudioReleaseActive] = useState(false)
@@ -126,16 +130,41 @@ export default function HeroScene({
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== '1' || event.repeat) return
       const target = event.target
+      if (event.key === 'Escape') {
+        if (event.repeat) return
+        event.preventDefault()
+        setControlsVisible((visible) => !visible)
+        return
+      }
       if (
         target instanceof HTMLElement &&
         target.closest('input, textarea, select, [contenteditable="true"]')
       )
         return
+      if (
+        event.key.toLowerCase() === 'f' &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault()
+        if (document.fullscreenElement) {
+          void document.exitFullscreen().catch(() => {})
+        } else {
+          void document.documentElement.requestFullscreen().catch(() => {})
+        }
+        return
+      }
+      if (target instanceof HTMLElement && target.closest('[role="dialog"]')) return
+      if (event.key === '0') {
+        cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
+        invalidate.current()
+        return
+      }
+      if (event.key !== '1' || event.repeat) return
       if (rotationEnabledRef.current) {
         pose.current = [0, 0, 0]
-        cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
         setConfig((current) => ({
           ...current,
           model: { ...current.model, rotation: [0, 0, 0] },
@@ -151,6 +180,16 @@ export default function HeroScene({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+  useEffect(() => {
+    if (!controlsVisible) return
+    returnFocusTo.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    controlsCloseButton.current?.focus()
+    return () => {
+      if (returnFocusTo.current?.isConnected) returnFocusTo.current.focus()
+    }
+  }, [controlsVisible])
   useEffect(() => {
     if (playing) {
       wasPlaying.current = true
@@ -220,7 +259,7 @@ export default function HeroScene({
     const { key } = event
     if (key !== 'Home') return
     event.preventDefault()
-    if (key === 'Home') resetPose()
+    resetPose()
   }
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
@@ -326,7 +365,9 @@ export default function HeroScene({
               <span className="desktop-instruction">DRAG TO ORBIT · </span>
               <span className="mobile-instruction">SWIPE TO ORBIT · </span>
               <span className="sr-only">
-                Drag to orbit the camera. Press 1 to toggle sculpture rotation. Home resets.{' '}
+                Drag to orbit the camera. Press 0 to reset the camera, 1 to toggle sculpture
+                rotation, Home to reset the sculpture pose, F to toggle fullscreen, and Escape
+                to show or hide keyboard controls.{' '}
               </span>
               EXPLORE THE VESSEL
             </>
@@ -335,7 +376,7 @@ export default function HeroScene({
         {!failed && (
           <div>
             <button
-              aria-label="Reset camera view"
+              aria-label="Reset camera and sculpture"
               onClick={() => {
                 cameraOrbit.current = { theta: 0, phi: Math.PI / 2 }
                 resetPose()
@@ -346,6 +387,97 @@ export default function HeroScene({
           </div>
         )}
       </div>
+      {controlsVisible && createPortal(
+        <div
+          className="scene-help-backdrop"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setControlsVisible(false)
+          }}
+        >
+          <section
+            className="scene-keyboard-help"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="scene-keyboard-title"
+            onKeyDown={(event) => {
+              if (event.key !== 'Tab') return
+              event.preventDefault()
+              controlsCloseButton.current?.focus()
+            }}
+          >
+            <header className="scene-keyboard-heading">
+              <div>
+                <h2 id="scene-keyboard-title">KEYBOARD MAP</h2>
+              </div>
+              <button
+                ref={controlsCloseButton}
+                type="button"
+                className="scene-keyboard-help-close"
+                aria-label="Close keyboard controls"
+                onClick={() => setControlsVisible(false)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="scene-keymap">
+              <section
+                className="scene-keymap-section scene-keymap-navigation"
+                aria-label="Menu navigation"
+              >
+                <h3>MENU NAVIGATION</h3>
+                <div className="scene-keymap-arrow-layout">
+                  <div className="scene-keymap-arrows" aria-hidden="true">
+                    <kbd className="key-up">↑</kbd>
+                    <kbd className="key-left">←</kbd>
+                    <kbd className="key-down">↓</kbd>
+                    <kbd className="key-right">→</kbd>
+                  </div>
+                  <div className="scene-keymap-labels">
+                    <p>
+                      <span>↑ / ↓</span> Move through menu
+                    </p>
+                    <p>
+                      <span>← / →</span> Seek ±10 seconds
+                    </p>
+                    <p>
+                      <span>SHIFT + ← / →</span> Previous / next track
+                    </p>
+                  </div>
+                </div>
+              </section>
+              <section className="scene-keymap-section" aria-label="Playback">
+                <h3>PLAYBACK</h3>
+                <div className="scene-keymap-command">
+                  <kbd className="key-space">SPACE</kbd><span>Play / pause</span>
+                </div>
+                <div className="scene-keymap-command">
+                  <kbd>F</kbd><span>Toggle fullscreen</span>
+                </div>
+              </section>
+              <section
+                className="scene-keymap-section scene-keymap-scene"
+                aria-label="Scene controls"
+              >
+                <h3>SCENE</h3>
+                <div className="scene-keymap-command">
+                  <kbd>0</kbd><span>Reset camera view</span>
+                </div>
+                <div className="scene-keymap-command">
+                  <kbd>1</kbd><span>Toggle sculpture rotation</span>
+                </div>
+                <div className="scene-keymap-command">
+                  <kbd>HOME</kbd><span>Reset sculpture pose</span>
+                </div>
+              </section>
+            </div>
+            <footer className="scene-keyboard-footer">
+              <span><kbd>ESC</kbd> Close map</span>
+              <span>DRAG / SWIPE TO ORBIT</span>
+            </footer>
+          </section>
+        </div>,
+        document.body,
+      )}
       <span role="status" className="sr-only">
         {failed
           ? 'Interactive scene unavailable. Showing a still image.'
