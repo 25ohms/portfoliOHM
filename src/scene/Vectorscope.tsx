@@ -11,11 +11,10 @@ import {
   PointsMaterial,
   Vector3,
 } from 'three'
-import { useMusicPlayer } from '../audio/MusicPlayer'
 
-const SCOPE_RADIUS = 0.9
+export const SCOPE_RADIUS = 0.9
 const SCOPE_DEPTH = 2
-const TRACE_COUNT = 1024
+export const TRACE_COUNT = 1024
 const CAGE_STEPS = 48
 export type SpinePath = Vector3[] | null
 
@@ -31,16 +30,13 @@ function makeTimeAxis(curve: CatmullRomCurve3 | null): Line {
 
 export default function Vectorscope({
   spine,
+  samples,
+  visible,
 }: {
   spine?: SpinePath
+  samples: { current: Float32Array }
+  visible: boolean
 }) {
-  const { vectorscopeAnalysers, playing } = useMusicPlayer()
-  const data = useMemo(
-    () => vectorscopeAnalysers
-      ? [new Uint8Array(vectorscopeAnalysers[0].fftSize), new Uint8Array(vectorscopeAnalysers[1].fftSize)] as const
-      : null,
-    [vectorscopeAnalysers],
-  )
   const curve = useMemo(
     () => spine && spine.length > 1 ? new CatmullRomCurve3(spine, false, 'centripetal') : null,
     [spine],
@@ -73,19 +69,17 @@ export default function Vectorscope({
   )
 
   useFrame(() => {
-    if (!playing || !vectorscopeAnalysers || !data) return
-    vectorscopeAnalysers[0].getByteTimeDomainData(data[0])
-    vectorscopeAnalysers[1].getByteTimeDomainData(data[1])
     const positions = trace.geometry.getAttribute('position') as BufferAttribute
-    const sampleCount = Math.min(positions.count, data[0].length, data[1].length)
-    const start = Math.min(data[0].length, data[1].length) - sampleCount
+    const sampleCount = Math.min(positions.count, samples.current.length / 2)
     for (let i = 0; i < positions.count; i++) {
       const t = i / (positions.count - 1)
-      const sample = start + Math.floor(t * (sampleCount - 1))
-      const left = (data[0][sample] - 128) / 128
-      const right = (data[1][sample] - 128) / 128
-      const mid = (left + right) * 0.5 * SCOPE_RADIUS
-      const side = (left - right) * 0.5 * SCOPE_RADIUS
+      const samplePosition = t * (sampleCount - 1)
+      const sampleIndex = Math.floor(samplePosition)
+      const sampleBlend = samplePosition - sampleIndex
+      const sampleStart = sampleIndex * 2
+      const sampleEnd = Math.min(sampleCount - 1, sampleIndex + 1) * 2
+      const mid = samples.current[sampleStart] * (1 - sampleBlend) + samples.current[sampleEnd] * sampleBlend
+      const side = samples.current[sampleStart + 1] * (1 - sampleBlend) + samples.current[sampleEnd + 1] * sampleBlend
       if (curve && transportedFrames) {
         const center = curve.getPointAt(t)
         center.addScaledVector(transportedFrames.normals[i], mid)
@@ -106,12 +100,10 @@ export default function Vectorscope({
   }, [trace, traceMaterial, traceLineMaterial, timeAxis, timeAxisMaterial])
 
   return (
-    <group>
+    <group visible={visible}>
       <primitive object={timeAxis} />
-      <group visible={playing && Boolean(vectorscopeAnalysers)}>
-        <primitive object={traceLine} />
-        <primitive object={trace} />
-      </group>
+      <primitive object={traceLine} />
+      <primitive object={trace} />
     </group>
   )
 }

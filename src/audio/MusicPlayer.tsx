@@ -396,19 +396,25 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         const source = context.createMediaElementSource(element)
         const analyserNode = context.createAnalyser()
         const splitter = context.createChannelSplitter(2)
+        const leftVectorscopeFilter = context.createBiquadFilter()
+        const rightVectorscopeFilter = context.createBiquadFilter()
         const leftScope = context.createAnalyser()
         const rightScope = context.createAnalyser()
         const gain = context.createGain()
         analyserNode.fftSize = 2048
         analyserNode.smoothingTimeConstant = 0.15
+        leftVectorscopeFilter.type = rightVectorscopeFilter.type = 'lowpass'
+        leftVectorscopeFilter.frequency.value = rightVectorscopeFilter.frequency.value = 500
         leftScope.fftSize = rightScope.fftSize = 1024
         leftScope.smoothingTimeConstant = rightScope.smoothingTimeConstant = 0
         source.connect(analyserNode)
         analyserNode.connect(gain)
         gain.connect(context.destination)
         source.connect(splitter)
-        splitter.connect(leftScope, 0)
-        splitter.connect(rightScope, 1)
+        splitter.connect(leftVectorscopeFilter, 0)
+        splitter.connect(rightVectorscopeFilter, 1)
+        leftVectorscopeFilter.connect(leftScope)
+        rightVectorscopeFilter.connect(rightScope)
         // Keep the scope analysers in the active graph without adding audible signal.
         const silentTap = context.createGain()
         silentTap.gain.value = 0
