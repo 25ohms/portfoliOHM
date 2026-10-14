@@ -37,6 +37,11 @@ function PortfolioExperience() {
   const [preparedArtworkUrl, setPreparedArtworkUrl] = useState<string | null>(null)
   const [loaderRemoved, setLoaderRemoved] = useState(false)
   const [showsAccent, setShowsAccent] = useState<string | null>(null)
+  const [heroTitleHovered, setHeroTitleHovered] = useState(false)
+  const [heroHintScale, setHeroHintScale] = useState(1)
+  const heroTitleRef = useRef<HTMLHeadingElement>(null)
+  const heroMachineRef = useRef<HTMLSpanElement>(null)
+  const heroHintRef = useRef<HTMLSpanElement>(null)
   const lastWheelMove = useRef(0)
   const active = dialItems[selected]
   const move = useCallback(
@@ -48,9 +53,61 @@ function PortfolioExperience() {
   useEffect(() => startShowsPreload(), [])
 
   useEffect(() => {
+    let pointerDown = false
+    const updateHover = (event: PointerEvent) => {
+      if (pointerDown) return
+      const bounds = heroTitleRef.current?.getBoundingClientRect()
+      setHeroTitleHovered(
+        !!bounds &&
+          event.clientX >= bounds.left &&
+          event.clientX <= bounds.right &&
+          event.clientY >= bounds.top &&
+          event.clientY <= bounds.bottom,
+      )
+    }
+    const onPointerDown = () => {
+      pointerDown = true
+      setHeroTitleHovered(false)
+    }
+    const onPointerEnd = (event: PointerEvent) => {
+      pointerDown = false
+      updateHover(event)
+    }
+    window.addEventListener('pointermove', updateHover)
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointerup', onPointerEnd)
+    window.addEventListener('pointercancel', onPointerEnd)
+    return () => {
+      window.removeEventListener('pointermove', updateHover)
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointerup', onPointerEnd)
+      window.removeEventListener('pointercancel', onPointerEnd)
+    }
+  }, [])
+
+  useEffect(() => {
+    const machine = heroMachineRef.current
+    const hint = heroHintRef.current
+    if (!machine || !hint) return
+    const measure = () => {
+      if (!hint.offsetWidth) return
+      const nextScale = machine.offsetWidth / hint.offsetWidth
+      setHeroHintScale((current) =>
+        Math.abs(current - nextScale) > 0.001 ? nextScale : current,
+      )
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(machine)
+    observer.observe(hint)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
+      if (event.key !== 'Escape' && target.closest('[role="dialog"]')) return
       if (target.closest('input:not([type="range"]), textarea, select, [contenteditable="true"]'))
         return
       if (event.key === ' ' || event.code === 'Space') {
@@ -68,9 +125,6 @@ function PortfolioExperience() {
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         move(event.key === 'ArrowDown' ? 1 : -1)
-      } else if (event.key === 'Escape') {
-        if (target.closest('[role="dialog"]')) return
-        setSelected(0)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -184,7 +238,11 @@ function PortfolioExperience() {
         </a>
         <div className="scene-layer">
           <Suspense fallback={null}>
-            <HeroScene cardOpen={selected > 0} onSettled={settleScene} />
+            <HeroScene
+              active={loaderRemoved}
+              cardOpen={selected > 0}
+              onSettled={settleScene}
+            />
           </Suspense>
         </div>
         <aside className="dial-rail">
@@ -231,12 +289,27 @@ function PortfolioExperience() {
         </aside>
         {selected === 0 && (
           <section className="hero-copy" id="home" aria-live="polite">
-            <h1 aria-label="between MAN and MACHINE">
-              <span className="hero-title-word">between</span>
-              <span className="hero-title-emphasis hero-title-man">MAN</span>
-              <span className="hero-title-word hero-title-and">and</span>
-              <span className="hero-title-emphasis hero-title-machine">MACHINE</span>
-            </h1>
+            <div className="hero-title-lockup">
+              <h1
+                ref={heroTitleRef}
+                className={heroTitleHovered ? 'is-title-hovered' : undefined}
+                aria-label="between MAN and MACHINE"
+              >
+                <span className="hero-title-word">between</span>
+                <span className="hero-title-emphasis hero-title-man">MAN</span>
+                <span className="hero-title-word hero-title-and">and</span>
+                <span ref={heroMachineRef} className="hero-title-emphasis hero-title-machine">
+                  MACHINE
+                </span>
+              </h1>
+              <span
+                ref={heroHintRef}
+                className="hero-controls-hint"
+                style={{ transform: `scale(${heroHintScale})` }}
+              >
+                PRESS <kbd>ESC</kbd> FOR CONTROLS
+              </span>
+            </div>
           </section>
         )}
         {selected === 1 && <AudioCard />}

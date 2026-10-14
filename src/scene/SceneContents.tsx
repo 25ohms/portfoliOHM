@@ -11,16 +11,24 @@ import { cameraDistance } from './math'
 import Enterprise from './Enterprise'
 import { useMusicPlayer } from '../audio/MusicPlayer'
 import { recordSceneFrame } from '../utils/performanceLogger'
-import { ENGINE_WARMUP_START, TAXI_START, isFinalFrontierTrack } from './sceneTimeline'
+import {
+  ENGINE_WARMUP_START,
+  TAXI_START,
+  WARP_END,
+  WARP_START,
+  isFinalFrontierTrack,
+} from './sceneTimeline'
 
 const TAXI_SUBJECT_SCALE = 4.5
 const TAXI_SUBJECT_Y_OFFSET = 2.5
 const TAXI_SUBJECT_X_ROTATION = MathUtils.degToRad(-30)
+const DEFAULT_CAMERA_ORBIT = { theta: 0, phi: Math.PI / 2 }
 
 export interface RuntimeScene {
   pose: MutableRefObject<Vec3>
   invalidate: MutableRefObject<() => void>
   dragging: MutableRefObject<boolean>
+  cameraOrbit: MutableRefObject<{ theta: number; phi: number }>
 }
 
 export type CameraView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'xz'
@@ -41,7 +49,6 @@ export default function SceneContents({
   resolution,
   onReady,
   onSlow,
-  cameraView,
   debugObjects,
 }: {
   config: SceneConfig
@@ -52,11 +59,13 @@ export default function SceneContents({
   resolution: number
   onReady: () => void
   onSlow: () => void
-  cameraView: CameraView
   debugObjects: MutableRefObject<SceneDebugObjects>
 }) {
+  const cameraView: CameraView = 'front'
   const group = useRef<Group>(null)
   const subjectGroup = useRef<Group>(null)
+  const babyGroup = useRef<Group>(null)
+  const logoGroup = useRef<Group>(null)
   const { currentTrack, playing, getCurrentTime } = useMusicPlayer()
   const isFinalFrontier = isFinalFrontierTrack(currentTrack?.title)
   const showEnterprise = playing && isFinalFrontier
@@ -68,6 +77,8 @@ export default function SceneContents({
   const projectionHit = useRef(new Vector3())
   const projectionNormal = useRef(new Vector3())
   const projectionNdc = useRef(new Vector2())
+  const cameraTarget = useRef(new Vector3())
+  const warpOrbitStart = useRef<{ theta: number; phi: number; progress: number } | null>(null)
   const samples = useRef({ elapsed: 0, frames: 0, reported: false, warmup: 0 })
   useEffect(() => {
     runtime.invalidate.current = invalidate
@@ -84,36 +95,21 @@ export default function SceneContents({
       1.12,
       config.camera.padding,
     )
-    perspective.up.set(0, 1, 0)
-    switch (cameraView) {
-      case 'back':
-        perspective.position.set(0, 0, -distance)
-        break
-      case 'left':
-        perspective.position.set(-distance, 0, 0)
-        break
-      case 'right':
-        perspective.position.set(distance, 0, 0)
-        break
-      case 'top':
-        perspective.position.set(0, distance, 0)
-        perspective.up.set(0, 0, -1)
-        break
-      case 'bottom':
-        perspective.position.set(0, -distance, 0)
-        perspective.up.set(0, 0, 1)
-        break
-      case 'xz':
-        perspective.position.set(0, -distance, 0)
-        perspective.up.set(0, 0, 1)
-        break
-      default:
-        perspective.position.set(0, 0, distance)
+    const views: Record<CameraView, { theta: number; phi: number }> = {
+      front: { theta: 0, phi: Math.PI / 2 },
+      back: { theta: Math.PI, phi: Math.PI / 2 },
+      left: { theta: -Math.PI / 2, phi: Math.PI / 2 },
+      right: { theta: Math.PI / 2, phi: Math.PI / 2 },
+      top: { theta: 0, phi: 0.08 },
+      bottom: { theta: 0, phi: Math.PI - 0.08 },
+      xz: { theta: 0, phi: Math.PI - 0.08 },
     }
+    runtime.cameraOrbit.current = { ...views[cameraView] }
+    perspective.position.set(0, 0, distance)
     perspective.lookAt(0, 0, 0)
     perspective.updateProjectionMatrix()
     invalidate()
-  }, [camera, cameraView, config.camera, size, invalidate])
+  }, [camera, cameraView, config.camera, size, invalidate, runtime])
   useEffect(() => {
     let offsetX = 0
     let scale = config.model.scale
@@ -130,7 +126,7 @@ export default function SceneContents({
         const fraction = centerX / experienceRect.width - 0.5
         const worldWidth =
           (2 *
-            camera.position.z *
+            cameraDistance(size.width / size.height, config.camera.fov, 1.12, config.camera.padding) *
             Math.tan(MathUtils.degToRad(config.camera.fov) / 2) *
             size.width) /
           size.height
@@ -190,9 +186,50 @@ export default function SceneContents({
     } else {
       debugObjects.current.cursorProjection = null
     }
-    if (running && rotationEnabled && !runtime.dragging.current) {
+    if (running && rotationEnabled) {
       runtime.pose.current[1] =
         (runtime.pose.current[1] + Math.min(delta, 0.05) * config.motion.speed) % (Math.PI * 2)
+    }
+    const time = playing && showEnterprise ? getCurrentTime() : -1
+    const taxiIn = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
+    const warpOut = MathUtils.smoothstep(time, WARP_START, WARP_END)
+    const taxiProgress = taxiIn * (1 - warpOut)
+    if (time < WARP_START) {
+      warpOrbitStart.current = null
+    } else if (time <= WARP_END) {
+      const progress = MathUtils.smoothstep(time, WARP_START, WARP_END)
+      if (!warpOrbitStart.current) {
+        warpOrbitStart.current = { ...runtime.cameraOrbit.current, progress }
+      }
+      if (runtime.dragging.current) {
+        // Keep drag live and restart the remaining scripted return from the
+        // orbit the user is actively choosing.
+        warpOrbitStart.current = { ...runtime.cameraOrbit.current, progress }
+      } else {
+        const start = warpOrbitStart.current
+        const returnProgress = MathUtils.clamp(
+          (progress - start.progress) / (1 - start.progress || 1),
+          0,
+          1,
+        )
+        const thetaDelta = Math.atan2(Math.sin(-start.theta), Math.cos(-start.theta))
+        runtime.cameraOrbit.current = {
+          theta: start.theta + thetaDelta * returnProgress,
+          phi: MathUtils.lerp(start.phi, DEFAULT_CAMERA_ORBIT.phi, returnProgress),
+        }
+      }
+    } else if (warpOrbitStart.current) {
+      // Release the scripted orbit at the endpoint so camera drag remains free.
+      if (!runtime.dragging.current) {
+        runtime.cameraOrbit.current = { ...DEFAULT_CAMERA_ORBIT }
+      }
+      warpOrbitStart.current = null
+    }
+    if (subjectGroup.current) {
+      const taxiScale = 1 + (TAXI_SUBJECT_SCALE - 1) * taxiProgress
+      subjectGroup.current.scale.setScalar(taxiScale)
+      subjectGroup.current.position.y = -TAXI_SUBJECT_Y_OFFSET * taxiProgress
+      subjectGroup.current.rotation.x = TAXI_SUBJECT_X_ROTATION * taxiProgress
     }
     if (group.current) {
       debugObjects.current.baby = group.current
@@ -216,6 +253,25 @@ export default function SceneContents({
       group.current.scale.setScalar(
         MathUtils.lerp(group.current.scale.x, layoutTarget.current.scale, smoothing),
       )
+      const distance = cameraDistance(
+        size.width / size.height,
+        config.camera.fov,
+        1.12,
+        config.camera.padding,
+      )
+      const { theta, phi } = runtime.cameraOrbit.current
+      // Keep the camera orbit anchored to the scene origin so tab layout motion
+      // remains visible instead of being cancelled by a camera that follows it.
+      const target = cameraTarget.current.set(...config.model.position)
+      const sinPhi = Math.sin(phi)
+      camera.position.set(
+        target.x + distance * sinPhi * Math.sin(theta),
+        target.y + distance * Math.cos(phi),
+        target.z + distance * sinPhi * Math.cos(theta),
+      )
+      camera.up.set(0, 1, 0)
+      camera.lookAt(target)
+      camera.updateMatrixWorld()
       if (layoutAnimating.current) {
         const target = layoutTarget.current
         const settled =
@@ -226,14 +282,6 @@ export default function SceneContents({
         if (settled) layoutAnimating.current = false
         else if (!running) invalidate()
       }
-    }
-    if (subjectGroup.current) {
-      const time = playing && showEnterprise ? getCurrentTime() : -1
-      const taxiProgress = MathUtils.smoothstep(time, TAXI_START, ENGINE_WARMUP_START)
-      const taxiScale = 1 + (TAXI_SUBJECT_SCALE - 1) * taxiProgress
-      subjectGroup.current.scale.setScalar(taxiScale)
-      subjectGroup.current.position.y = -TAXI_SUBJECT_Y_OFFSET * taxiProgress
-      subjectGroup.current.rotation.x = TAXI_SUBJECT_X_ROTATION * taxiProgress
     }
     if (running && !samples.current.reported) {
       const s = samples.current
@@ -255,25 +303,39 @@ export default function SceneContents({
   return (
     <>
       <color attach="background" args={['#000000']} />
-      <Nebula />
-      <Stars config={config.stars} />
-      <group ref={group} position={config.model.position} scale={config.model.scale}>
-        <group ref={subjectGroup}>
-          <Suspense fallback={null}>
-            <>
-              <group position={config.logo.position} rotation={config.logo.rotation} scale={0.42}>
-                <Logo config={config} timelineEnabled={isFinalFrontier} />
-              </group>
-              <Fetus config={config} onReady={onReady} />
-            </>
-          </Suspense>
+      <group name="scene-supergroup">
+        <Nebula />
+        <Stars config={config.stars} />
+        <group ref={group} position={config.model.position} scale={config.model.scale}>
+          <group ref={subjectGroup}>
+            <Suspense fallback={null}>
+              <>
+                <group
+                  ref={logoGroup}
+                  position={config.logo.position}
+                  rotation={config.logo.rotation}
+                  scale={0.42}
+                >
+                  <Logo config={config} timelineEnabled={isFinalFrontier} />
+                </group>
+                <group ref={babyGroup}>
+                  <Fetus config={config} onReady={onReady} />
+                </group>
+              </>
+            </Suspense>
+          </group>
+          {showEnterprise && (
+            <Suspense fallback={null}>
+              <Enterprise
+                anchor={group}
+                babyGroup={babyGroup}
+                logoGroup={logoGroup}
+                debugObjects={debugObjects}
+              />
+            </Suspense>
+          )}
         </group>
       </group>
-      {showEnterprise && (
-        <Suspense fallback={null}>
-          <Enterprise anchor={group} debugObjects={debugObjects} />
-        </Suspense>
-      )}
       <PalettePass config={config} resolution={resolution} />
     </>
   )
