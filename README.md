@@ -1,6 +1,6 @@
 # 25ohms / OHMEGA
 
-A single-screen artist portfolio with an interactive radial menu and a live, palette-mapped 3D scene.
+A single-screen artist portfolio with an interactive radial menu, audio playback, event listings, and a live, palette-mapped 3D scene. The scene combines a fetus sculpture, animated OHMEGA logo, Enterprise flyby, stars, and procedural nebula. Low-frequency stereo audio drives a vectorscope trace fitted to the sculpture's saved spine path and a surface-aware displacement effect.
 
 ## Install and run
 
@@ -15,7 +15,7 @@ Open the local URL printed by Vite. `npm run build` creates the static site in `
 
 In development, `[25ohms perf]` console logs report startup timings and frame drops. Toggle them with `window.__25ohmsPerfLogger.disable()` or `.enable()`; each reloads the page.
 
-The app uses React and Three.js with React Three Fiber; Leva supplies development scene controls. Space Mono and Michroma are bundled locally. Vite, TypeScript, and ESLint support development and builds; Vitest, Playwright, and Prettier provide tests and formatting. Playwright browsers are installed separately with `npx playwright install chromium firefox webkit` when running browser tests.
+The app uses React and Three.js with React Three Fiber; Leva supplies development scene controls. Scene setup prepares a signed-distance field in a Web Worker, keeping the heavier mesh analysis off the main thread. Space Mono and Michroma are bundled locally. Vite, TypeScript, and ESLint support development and builds; Vitest, Playwright, and Prettier provide tests and formatting. Playwright browsers are installed separately with `npx playwright install chromium firefox webkit` when running browser tests.
 
 The music catalogue and audio files are served from a public Cloudflare R2 bucket. Local development needs internet access to that bucket, and the bucket must allow browser CORS requests for audio and waveform loading. `.env` is ignored by Git. Vite injects `BUCKET_URL` into the client bundle for browser requests, so this keeps the URL out of the repository but does not hide it from site visitors. Do not put credentials or private keys in this variable. If the bucket must be private, serve the audio through a backend or signed URLs instead of exposing a direct bucket URL.
 
@@ -38,7 +38,7 @@ src/
   App.tsx                  Radial menu, audio card, and link panels
   styles.css               Layout, typography, effects, and responsive rules
   audio/
-    MusicPlayer.tsx        R2 catalogue, playback, and audio analysis
+    MusicPlayer.tsx        R2 catalogue, playback, and stereo audio analysis
     NowPlayingBar.tsx      Persistent compact player outside the audio menu
     artworkCache.ts        Preload and cache the now-playing thumbnail
     SpectrumVisualizer.tsx Live audio spectrum display
@@ -54,16 +54,20 @@ src/
   utils/color.ts           Artwork accent-color helpers
   utils/performanceLogger.ts  Toggleable development performance diagnostics
   scene/
-    HeroScene.tsx          Scene lifecycle, fallback, and dev controls
+    HeroScene.tsx          Scene lifecycle, camera orbit, keyboard map, and dev controls
     SceneContents.tsx      Camera, model, effects, and scene interaction
-    Fetus.tsx              FBX model setup and materials
+    Fetus.tsx              FBX model, audio-reactive vectorscope, and displacement
     FetusLoader.ts         Repair and parse the source FBX
     Logo.tsx               Animated 3D OHMEGA logo
-    Enterprise.tsx         Animated Enterprise OBJ model
+    Enterprise.tsx         Animated Enterprise OBJ flyby
     Stars.tsx              Animated star field
     Nebula.tsx             Procedural background clouds
     PalettePass.tsx        Dithered palette postprocessing
     SceneDevPanel.tsx      Development-only scene tuning UI
+    SignedDistanceField.ts Mesh signed-distance calculations
+    spineAnalysis.worker.ts Background mesh and spine analysis
+    spinePath.v1.json      Saved spine path used by the vectorscope fit
+    sceneTimeline.ts       Shared animation timing
     math.ts                Palette, camera, and seeded-random helpers
     scene.test.ts          Scene config, loader, and math tests
 models/
@@ -91,7 +95,7 @@ reference/
 
 The 2K12 is the primary typeface and is served from `public/fonts/the-2k12.ttf` in production. The static sidebar wordmark and secondary content use Michroma. Menu dial labels and page headings display in uppercase; “between” and “and” stay lowercase, while “MAN” and “MACHINE” have a broad accent glow. The two-line home headline uses tight row spacing. Album sidebar labels preserve catalogue casing. Space Mono is reserved for small utility labels, event details, and promoter credits. The R2 now-playing bar stays available across menu sections and shares the audio card's artwork accent and seekable peak waveform. Project order comes from `music/indexing.txt`; each project's `tracklist.txt` lists its WAV files. Generate interval-peak waveform sidecars and upload each beside its WAV with `npm run waveforms:upload` (requires Wrangler access to the R2 bucket).
 
-Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu.
+Keyboard controls: **Space** toggles playback, **Left/Right** seeks by 10 seconds, **Shift+Left/Right** changes tracks, and **Up/Down** moves through the menu. Press **Escape** to open the keyboard map. In the scene, drag or swipe to orbit the camera; **0** resets the camera, **1** toggles sculpture rotation, **Home** restores the saved sculpture pose, and **F** toggles fullscreen. The on-screen reset button resets both camera and sculpture pose.
 
 ## Triage before removal
 
@@ -110,4 +114,4 @@ npm run test:e2e
 npm audit
 ```
 
-For scene tuning and preview capture, start `npm run dev`, then use `npm run capture` to refresh the fallback still images. Deploy the contents of `dist/` to a static host.
+For scene tuning and preview capture, start `npm run dev`. The development-only **Tune scene** panel exposes scene settings and saves a local draft in browser storage. Use `npm run capture` to refresh the fallback still images. Deploy the contents of `dist/` to a static host.
