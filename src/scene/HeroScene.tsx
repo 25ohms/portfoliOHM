@@ -123,6 +123,7 @@ export default function HeroScene({
     pose.current = [...config.model.rotation]
     invalidate.current()
   }, [config.model.rotation])
+
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== '1' || event.repeat) return

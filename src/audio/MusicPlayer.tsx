@@ -63,6 +63,7 @@ type PlayerState = {
   currentTrack: MusicTrack | null
   catalogueStatus: 'loading' | 'ready' | 'error'
   analyser: AnalyserNode | null
+  vectorscopeAnalysers: [AnalyserNode, AnalyserNode] | null
   catalogueError: string | null
   playbackError: string | null
   playing: boolean
@@ -230,6 +231,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const waveformSelection = useRef<string | null>(null)
   const [catalogueStatus, setCatalogueStatus] = useState<PlayerState['catalogueStatus']>('loading')
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
+  const [vectorscopeAnalysers, setVectorscopeAnalysers] = useState<[AnalyserNode, AnalyserNode] | null>(null)
   const audioContext = useRef<AudioContext | null>(null)
   const [catalogueError, setCatalogueError] = useState<string | null>(null)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
@@ -393,14 +395,29 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         const context = new AudioContext()
         const source = context.createMediaElementSource(element)
         const analyserNode = context.createAnalyser()
+        const splitter = context.createChannelSplitter(2)
+        const leftScope = context.createAnalyser()
+        const rightScope = context.createAnalyser()
         const gain = context.createGain()
         analyserNode.fftSize = 2048
         analyserNode.smoothingTimeConstant = 0.15
+        leftScope.fftSize = rightScope.fftSize = 1024
+        leftScope.smoothingTimeConstant = rightScope.smoothingTimeConstant = 0
         source.connect(analyserNode)
         analyserNode.connect(gain)
         gain.connect(context.destination)
+        source.connect(splitter)
+        splitter.connect(leftScope, 0)
+        splitter.connect(rightScope, 1)
+        // Keep the scope analysers in the active graph without adding audible signal.
+        const silentTap = context.createGain()
+        silentTap.gain.value = 0
+        leftScope.connect(silentTap)
+        rightScope.connect(silentTap)
+        silentTap.connect(context.destination)
         audioContext.current = context
         setAnalyser(analyserNode)
+        setVectorscopeAnalysers([leftScope, rightScope])
       }
       await audioContext.current.resume()
       await element.play()
@@ -517,6 +534,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     currentTrack,
     catalogueStatus,
     analyser,
+    vectorscopeAnalysers,
     catalogueError,
     playbackError,
     playing,

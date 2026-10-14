@@ -3,8 +3,11 @@ import { useFrame, useLoader } from '@react-three/fiber'
 import {
   AdditiveBlending,
   Box3,
+  BufferGeometry,
   DynamicDrawUsage,
   Group,
+  Line,
+  LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
   Vector3,
@@ -17,6 +20,8 @@ import { useMusicPlayer } from '../audio/MusicPlayer'
 import { readBassLevel, smoothBassLevel } from '../audio/bass'
 import { logPerformance } from '../utils/performanceLogger'
 import { babyDisplacementMultiplierAt, isFinalFrontierTrack } from './sceneTimeline'
+import Vectorscope from './Vectorscope'
+import spinePathData from './spinePath.v1.json'
 
 export default function Fetus({ config, onReady }: { config: SceneConfig; onReady: () => void }) {
   const original = useLoader(FetusLoader, modelUrl)
@@ -66,6 +71,14 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     })
     return { normalized, material, geometries }
   }, [original])
+  const staticSpinePath = useMemo(
+    () => spinePathData.points.map(([x, y, z]) => new Vector3(x, y, z)),
+    [],
+  )
+  const scaledSpinePath = useMemo(
+    () => staticSpinePath.map((point) => point.clone().multiplyScalar(normalized.scale.x)),
+    [staticSpinePath, normalized.scale.x],
+  )
   useFrame((state, delta) => {
     const target = playing && analyser && audioData ? readBassLevel(analyser, audioData) : 0
     bassLevel.current = smoothBassLevel(bassLevel.current, target, delta)
@@ -73,6 +86,7 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     if (strength === 0) return
     const time = state.clock.elapsedTime
     const timelineMultiplier = timelineEnabled ? babyDisplacementMultiplierAt(getCurrentTime()) : 1
+    const amount = ((0.008 * strength) / normalized.scale.x) * timelineMultiplier
     for (const geometry of geometries) {
       const position = geometry.getAttribute('position')
       const base = geometry.userData.basePosition as Float32Array | undefined
@@ -80,7 +94,6 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
         geometry.userData.basePosition = new Float32Array(position.array as ArrayLike<number>)
       }
       const originalPositions = geometry.userData.basePosition as Float32Array
-      const amount = ((0.008 * strength) / normalized.scale.x) * timelineMultiplier
       for (let index = 0; index < position.count; index++) {
         const offset = index * 3
         const x = originalPositions[offset]
@@ -127,5 +140,25 @@ export default function Fetus({ config, onReady }: { config: SceneConfig; onRead
     },
     [material, geometries],
   )
-  return <primitive object={normalized} dispose={null} />
+  return (
+    <>
+      <primitive
+        object={normalized}
+        dispose={null}
+      />
+      <SpineGuide points={scaledSpinePath} />
+      <Vectorscope spine={scaledSpinePath} />
+    </>
+  )
+}
+
+function SpineGuide({ points }: { points: Vector3[] }) {
+  const { line, geometry, material } = useMemo(() => {
+    const buffer = new BufferGeometry()
+    buffer.setFromPoints(points)
+    const material = new LineBasicMaterial({ color: '#ff9a68', depthTest: false })
+    return { line: new Line(buffer, material), geometry: buffer, material }
+  }, [points])
+  useEffect(() => () => { geometry.dispose(); material.dispose() }, [geometry, material])
+  return <primitive object={line} />
 }
